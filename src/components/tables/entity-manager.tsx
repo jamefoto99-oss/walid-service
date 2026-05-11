@@ -20,7 +20,7 @@ import { importCsvAction } from "@/app/actions/import-csv";
 import { approveQuotation, convertQuotationToInvoice } from "@/app/actions/workflows";
 import { buildModuleSchema } from "@/lib/validation";
 import type { FieldConfig, LineItemInput, ModuleConfig, ReferenceData, UserRole } from "@/lib/types";
-import { cn, formatCurrency, formatDate } from "@/lib/utils";
+import { cn, formatCurrency, formatDate, toNumber } from "@/lib/utils";
 import { Badge } from "../ui/badge";
 import { Button, ButtonLink } from "../ui/button";
 import { LineItemsField } from "../forms/line-items-field";
@@ -87,6 +87,38 @@ function defaultValue(field: FieldConfig, row?: Record<string, unknown>, initial
   if (field.type === "select" && field.options?.length) return field.options[0].value;
   if (field.type === "number") return "0";
   return "";
+}
+
+const defaultLineItem: LineItemInput = {
+  item_type: "labor",
+  description: "",
+  quantity: 1,
+  unit: "ชิ้น",
+  unit_price: 0,
+  discount: 0,
+};
+
+function lineItemsFromRow(row?: Record<string, unknown>): LineItemInput[] {
+  const rawItems = row?.cash_bill_items ?? row?.items;
+  const source = Array.isArray(rawItems) ? rawItems : [];
+  const items = source.map((item) => {
+    const record = item as Record<string, unknown>;
+    const rawType = String(record.item_type ?? "labor");
+    const itemType: LineItemInput["item_type"] =
+      rawType === "part" ? "part" : rawType === "other" ? "other" : "labor";
+
+    return {
+      item_type: itemType,
+      description: String(record.description ?? ""),
+      quantity: toNumber(record.quantity) || 1,
+      unit: String(record.unit ?? defaultLineItem.unit),
+      unit_price: toNumber(record.unit_price),
+      discount: toNumber(record.discount),
+      part_id: record.part_id ? String(record.part_id) : null,
+    };
+  });
+
+  return items.length ? items : [{ ...defaultLineItem }];
 }
 
 function FieldControl({
@@ -345,9 +377,7 @@ function EntityFormDialog({
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [items, setItems] = useState<LineItemInput[]>([
-    { item_type: "labor", description: "", quantity: 1, unit: "ชิ้น", unit_price: 0, discount: 0 },
-  ]);
+  const [items, setItems] = useState<LineItemInput[]>(() => lineItemsFromRow(row));
   const schema = useMemo(() => buildModuleSchema(config), [config]);
   const form = useForm<Record<string, unknown>>({
     resolver: zodResolver(schema),
@@ -380,7 +410,10 @@ function EntityFormDialog({
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4">
       <form
         onSubmit={form.handleSubmit(submit)}
-        className="mt-8 w-full max-w-3xl rounded-lg border border-border bg-surface p-5 shadow-xl"
+        className={cn(
+          "mt-8 w-full rounded-lg border border-border bg-surface p-5 shadow-xl",
+          config.fields.some((field) => field.type === "line-items") ? "max-w-6xl" : "max-w-3xl",
+        )}
       >
         <div className="mb-5 flex items-center justify-between gap-3">
           <div>
@@ -444,7 +477,8 @@ export function EntityManager({ config, rows, references, role, initialValues }:
   const deletable = config.policy.delete.includes(role);
   const canCreate = writable && config.allowCreate !== false;
   const canImportCsv = writable && csvImportModules.has(config.key);
-  const supportsInlineEdit = !config.fields.some((field) => field.type === "line-items");
+  const supportsInlineEdit =
+    !config.fields.some((field) => field.type === "line-items") || config.key === "cash-bills";
 
   const columns = useMemo<ColumnDef<Record<string, unknown>>[]>(() => {
     const base = config.columns.map((column) => ({
@@ -475,6 +509,15 @@ export function EntityManager({ config, rows, references, role, initialValues }:
           const original = row.original;
           return (
             <div className="flex justify-end gap-1">
+              {config.key === "cash-bills" ? (
+                <Link
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-md hover:bg-surface-soft"
+                  href={`/print/cash-bills/${original.id}`}
+                  title="พรีวิวบิลเงินสด"
+                >
+                  <Eye className="h-4 w-4" />
+                </Link>
+              ) : null}
               {["quotations", "invoices", "receipts", "cash-bills"].includes(config.key) ? (
                 <Link
                   className="inline-flex h-9 w-9 items-center justify-center rounded-md hover:bg-surface-soft"

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireModuleAccess } from "@/lib/auth";
+import { getLatestCompanySettings } from "@/lib/company-settings";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { ActionResult } from "@/lib/types";
 
@@ -71,13 +72,7 @@ export async function saveCompanySettings(input: unknown): Promise<ActionResult>
       cash_bill_prefix: normalizePrefix(payload.cash_bill_prefix),
     };
 
-    const { data: current } = await supabase
-      .from("company_settings")
-      .select("id")
-      .is("deleted_at", null)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
+    const current = await getLatestCompanySettings(supabase);
 
     const mutation = current?.id
       ? supabase.from("company_settings").update(normalized).eq("id", current.id).select("id").single()

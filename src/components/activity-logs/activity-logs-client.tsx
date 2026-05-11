@@ -67,6 +67,7 @@ const actionLabels: Record<string, string> = {
   invite_user: "เชิญผู้ใช้",
   receive_invoice_payment: "รับชำระเงิน",
   update: "แก้ไขข้อมูล",
+  update_cash_bill: "แก้ไขบิลเงินสด",
   update_company_settings: "แก้ไขตั้งค่ากิจการ",
   update_document_counters: "แก้ไขเลขที่เอกสาร",
   update_repair_job_items: "แก้ไขรายการซ่อม",

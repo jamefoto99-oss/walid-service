@@ -5,6 +5,7 @@ import {
   summarizeBackupRows,
   totalBackupRows,
 } from "./backup";
+import { getLatestCompanySettings } from "./company-settings";
 import { isSupabaseAdminConfigured } from "./supabase/admin";
 import { createSupabaseServerClient } from "./supabase/server";
 import type { DashboardData, ModuleConfig, PurchasePageData, ReferenceData } from "./types";
@@ -77,7 +78,8 @@ export async function getModuleRows(config: ModuleConfig) {
   const supabase = await createSupabaseServerClient();
   if (!supabase) return { setupRequired: true, rows: [] as Record<string, unknown>[] };
 
-  const query = supabase.from(config.table).select("*").order("created_at", { ascending: false });
+  const selectColumns = config.key === "cash-bills" ? "*, cash_bill_items(*)" : "*";
+  const query = supabase.from(config.table).select(selectColumns).order("created_at", { ascending: false });
   if (config.table !== "profiles") query.is("deleted_at", null);
 
   const { data, error } = await query;
@@ -86,7 +88,7 @@ export async function getModuleRows(config: ModuleConfig) {
     return { setupRequired: false, rows: [] as Record<string, unknown>[] };
   }
 
-  return { setupRequired: false, rows: (data ?? []) as Record<string, unknown>[] };
+  return { setupRequired: false, rows: (data ?? []) as unknown as Record<string, unknown>[] };
 }
 
 export async function getDashboardData(): Promise<DashboardData> {
@@ -528,21 +530,12 @@ export async function getSettingsPageData() {
   const supabase = await createSupabaseServerClient();
   if (!supabase) return { setupRequired: true, settings: null, counters: [], logs: [] };
 
-  const settingsQuery = supabase
-    .from("company_settings")
-    .select("*")
-    .is("deleted_at", null)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
   const countersQuery = supabase
     .from("document_counters")
     .select("*")
     .order("prefix", { ascending: true });
 
-  const [{ data: settings, error }, { data: counters }] = await Promise.all([settingsQuery, countersQuery]);
-  if (error) return { setupRequired: false, settings: null, counters: [], logs: [] };
+  const [settings, { data: counters }] = await Promise.all([getLatestCompanySettings(supabase), countersQuery]);
 
   const logs = settings?.id
     ? await supabase
@@ -556,7 +549,7 @@ export async function getSettingsPageData() {
 
   return {
     setupRequired: false,
-    settings: (settings ?? null) as Record<string, unknown> | null,
+    settings,
     counters: (counters ?? []) as Record<string, unknown>[],
     logs: (logs.data ?? []) as Record<string, unknown>[],
   };
@@ -981,7 +974,7 @@ export async function getDocumentForPrint(type: string, id: string) {
   const { data: document } = await supabase.from(config.table).select("*").eq("id", id).maybeSingle();
   if (!document) return null;
 
-  const settings = await supabase.from("company_settings").select("*").limit(1).maybeSingle();
+  const settings = await getLatestCompanySettings(supabase);
   const receiptInvoice =
     type === "receipts" && (document as Record<string, unknown>).invoice_id
       ? await supabase
@@ -1025,7 +1018,7 @@ export async function getDocumentForPrint(type: string, id: string) {
   return {
     type,
     document: document as Record<string, unknown>,
-    company: settings.data as Record<string, unknown> | null,
+    company: settings,
     customer: (customer.data as Record<string, unknown> | null) ?? manualCustomer,
     vehicle: (vehicle.data as Record<string, unknown> | null) ?? manualVehicle,
     items:

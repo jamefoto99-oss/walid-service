@@ -1,11 +1,11 @@
 import path from "node:path";
 import { NextResponse } from "next/server";
 import pdfMake from "pdfmake";
-import type { Content, TDocumentDefinitions } from "pdfmake/interfaces";
+import type { Content, ContentText, TDocumentDefinitions } from "pdfmake/interfaces";
 import { financeRoles } from "@/lib/constants";
 import { getSessionProfile } from "@/lib/auth";
 import { getDocumentForPrint } from "@/lib/data";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { toNumber } from "@/lib/utils";
 
 const labels: Record<string, string> = {
   "repair-job": "ใบรับรถ",
@@ -20,6 +20,12 @@ let fontsLoaded = false;
 function ensureFonts() {
   if (fontsLoaded) return;
   pdfMake.addFonts({
+    Roboto: {
+      normal: path.join(process.cwd(), "node_modules", "pdfmake", "fonts", "Roboto", "Roboto-Regular.ttf"),
+      bold: path.join(process.cwd(), "node_modules", "pdfmake", "fonts", "Roboto", "Roboto-Medium.ttf"),
+      italics: path.join(process.cwd(), "node_modules", "pdfmake", "fonts", "Roboto", "Roboto-Italic.ttf"),
+      bolditalics: path.join(process.cwd(), "node_modules", "pdfmake", "fonts", "Roboto", "Roboto-MediumItalic.ttf"),
+    },
     NotoSansThai: {
       normal: path.join(process.cwd(), "public", "fonts", "NotoSansThai-Regular.ttf"),
       bold: path.join(process.cwd(), "public", "fonts", "NotoSansThai-Regular.ttf"),
@@ -49,6 +55,38 @@ function cancellationReason(document: Record<string, unknown>) {
 
 function hasPaymentInfo(company: Record<string, unknown> | null) {
   return Boolean(company?.bank_name || company?.bank_account_number || company?.bank_account_name);
+}
+
+function fontRuns(value: unknown): Content {
+  const text = String(value ?? "-");
+  const parts = text.match(/[\u0E00-\u0E7F]+|[^\u0E00-\u0E7F]+/g) ?? [text];
+  return parts.map((part) => ({
+    text: part,
+    font: /[\u0E00-\u0E7F]/.test(part) ? "NotoSansThai" : "Roboto",
+  })) as unknown as Content;
+}
+
+function pdfText(value: unknown, props: Partial<ContentText> = {}): ContentText {
+  return { ...props, text: fontRuns(value) } as ContentText;
+}
+
+function formatPdfDate(value: unknown) {
+  if (!value) return "-";
+  const date = new Date(String(value));
+  if (Number.isNaN(date.getTime())) return "-";
+  return new Intl.DateTimeFormat("th-TH-u-nu-latn", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(date);
+}
+
+function formatPdfCurrency(value: unknown) {
+  const number = toNumber(value);
+  return `${number.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })} บาท`;
 }
 
 async function logoImageDataUrl(value: unknown) {
@@ -90,19 +128,19 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
   const companyHeader: Content[] = [];
   if (logoDataUrl) companyHeader.push({ image: logoDataUrl, width: 64, margin: [0, 0, 0, 8] });
   companyHeader.push(
-    { text: String(company?.company_name ?? "อู่วาลิดการช่าง"), style: "company" },
-    { text: String(company?.address ?? "-"), color: "#555555" },
-    { text: `โทร ${String(company?.phone ?? "-")} LINE ${String(company?.line_id ?? "-")}`, color: "#555555" },
+    pdfText(company?.company_name ?? "อู่วาลิดการช่าง", { style: "company" }),
+    pdfText(company?.address ?? "-", { color: "#555555" }),
+    pdfText(`โทร ${String(company?.phone ?? "-")} LINE ${String(company?.line_id ?? "-")}`, { color: "#555555" }),
   );
   const detailContent: Content[] =
     type === "repair-job"
       ? [
           { text: "อาการเสียที่ลูกค้าแจ้ง", bold: true, margin: [0, 10, 0, 4] },
-          { text: String(document.reported_problem ?? "-") },
+          pdfText(document.reported_problem ?? "-"),
           { text: "รายการตรวจเช็กเบื้องต้น", bold: true, margin: [0, 10, 0, 4] },
-          { text: String(document.preliminary_check ?? "-") },
+          pdfText(document.preliminary_check ?? "-"),
           { text: "ของมีค่าในรถ", bold: true, margin: [0, 10, 0, 4] },
-          { text: String(document.valuables ?? "-") },
+          pdfText(document.valuables ?? "-"),
         ]
       : [
           {
@@ -111,12 +149,12 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
               body: [
                 ["รายการ", "จำนวน", "หน่วย", "ราคา", "ส่วนลด", "รวม"],
                 ...items.map((item) => [
-                  String(item.description ?? "-"),
-                  String(item.quantity ?? 1),
-                  String(item.unit ?? "ชิ้น"),
-                  formatCurrency(item.unit_price),
-                  formatCurrency(item.discount),
-                  formatCurrency(item.total),
+                  pdfText(item.description ?? "-"),
+                  pdfText(item.quantity ?? 1),
+                  pdfText(item.unit ?? "ชิ้น"),
+                  pdfText(formatPdfCurrency(item.unit_price)),
+                  pdfText(formatPdfCurrency(item.discount)),
+                  pdfText(formatPdfCurrency(item.total)),
                 ]),
               ],
             },
@@ -131,11 +169,11 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
                 table: {
                   widths: ["*", 90],
                   body: [
-                    ["ยอดรวม", formatCurrency(document.subtotal ?? document.amount)],
-                    ["ส่วนลด", formatCurrency(document.discount)],
+                    ["ยอดรวม", pdfText(formatPdfCurrency(document.subtotal ?? document.amount))],
+                    ["ส่วนลด", pdfText(formatPdfCurrency(document.discount))],
                     [
                       { text: "ยอดสุทธิ", bold: true },
-                      { text: formatCurrency(document.total ?? document.amount), bold: true },
+                      pdfText(formatPdfCurrency(document.total ?? document.amount), { bold: true }),
                     ],
                   ],
                 },
@@ -156,14 +194,14 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
                   stack: [
                     { text: "ยกเลิก", fontSize: 28, bold: true, color: "#991b1b", alignment: "center" },
                     {
-                      text: `เอกสารนี้ถูกยกเลิกแล้วเมื่อ ${formatDate(document.voided_at ?? document.updated_at ?? document.created_at)}`,
+                      text: fontRuns(`เอกสารนี้ถูกยกเลิกแล้วเมื่อ ${formatPdfDate(document.voided_at ?? document.updated_at ?? document.created_at)}`),
                       color: "#991b1b",
                       bold: true,
                       alignment: "center",
                       margin: [0, 2, 0, 0],
                     },
                     {
-                      text: `เหตุผล: ${cancellationReason(document)}`,
+                      text: fontRuns(`เหตุผล: ${cancellationReason(document)}`),
                       color: "#7f1d1d",
                       alignment: "center",
                       margin: [0, 4, 0, 0],
@@ -204,19 +242,19 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
                 [
                   bankLogoDataUrl
                     ? { image: bankLogoDataUrl, fit: [48, 48], alignment: "center", margin: [0, 4, 0, 0] }
-                    : { text: "BANK", alignment: "center", bold: true, color: "#71717a", margin: [0, 18, 0, 0] },
+                    : { text: "BANK", font: "Roboto", alignment: "center", bold: true, color: "#71717a", margin: [0, 18, 0, 0] },
                   {
                     stack: [
                       { text: "ช่องทางการชำระเงิน", bold: true, margin: [0, 0, 0, 4] },
-                      { text: `ธนาคาร : ${String(company?.bank_name ?? "-")}` },
+                      pdfText(`ธนาคาร : ${String(company?.bank_name ?? "-")}`),
                       {
-                        text: `เลขที่บัญชี : ${String(company?.bank_account_number ?? "-")}`,
+                        text: fontRuns(`เลขที่บัญชี : ${String(company?.bank_account_number ?? "-")}`),
                         color: "#b91c1c",
                         bold: true,
                         fontSize: 15,
                       },
                       {
-                        text: `ชื่อบัญชี : ${String(company?.bank_account_name ?? "-")}`,
+                        text: fontRuns(`ชื่อบัญชี : ${String(company?.bank_account_name ?? "-")}`),
                         background: "#fef3c7",
                         bold: true,
                         margin: [0, 2, 0, 0],
@@ -251,8 +289,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
           companyHeader,
           [
             { text: labels[type] ?? "เอกสาร", style: "title", alignment: "right" },
-            { text: String(docNo(type, document)), alignment: "right" },
-            { text: `วันที่ ${formatDate(document.issued_at ?? document.received_at ?? document.created_at)}`, alignment: "right" },
+            pdfText(docNo(type, document), { alignment: "right" }),
+            pdfText(`วันที่ ${formatPdfDate(document.issued_at ?? document.received_at ?? document.created_at)}`, { alignment: "right" }),
           ],
         ],
       },
@@ -263,22 +301,22 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
         columns: [
           [
             { text: "ข้อมูลลูกค้า", bold: true },
-            { text: String(customer?.full_name ?? "-") },
-            { text: `โทร ${String(customer?.phone ?? "-")}` },
-            { text: String(customer?.address ?? "") },
+            pdfText(customer?.full_name ?? "-"),
+            pdfText(`โทร ${String(customer?.phone ?? "-")}`),
+            pdfText(customer?.address ?? ""),
           ],
           [
             { text: "ข้อมูลรถ", bold: true },
-            { text: `${String(vehicle?.license_plate ?? "-")} ${String(vehicle?.province ?? "")}` },
-            { text: `${String(vehicle?.brand ?? "")} ${String(vehicle?.model ?? "")} ${String(vehicle?.color ?? "")}` },
-            { text: `เลขไมล์ ${String(document.intake_mileage ?? vehicle?.mileage ?? "-")}` },
+            pdfText(`${String(vehicle?.license_plate ?? "-")} ${String(vehicle?.province ?? "")}`),
+            pdfText(`${String(vehicle?.brand ?? "")} ${String(vehicle?.model ?? "")} ${String(vehicle?.color ?? "")}`),
+            pdfText(`เลขไมล์ ${String(document.intake_mileage ?? vehicle?.mileage ?? "-")}`),
           ],
         ],
       },
       ...detailContent,
       ...paymentContent,
       { text: "หมายเหตุ", bold: true, margin: [0, 18, 0, 4] },
-      { text: String(document.notes ?? company?.document_footer ?? "-") },
+      pdfText(document.notes ?? company?.document_footer ?? "-"),
       {
         margin: [0, 70, 0, 0],
         columns: [

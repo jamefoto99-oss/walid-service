@@ -1,4 +1,5 @@
 import { createSupabaseServerClient } from "./supabase/server";
+import { getLatestCompanySettings } from "./company-settings";
 
 export type DocumentPrefix = "JOB" | "QT" | "INV" | "RC" | "PO" | "CB";
 
@@ -14,13 +15,8 @@ export async function nextDocumentNumber(prefix: DocumentPrefix) {
     PO: "purchase_prefix",
     CB: "cash_bill_prefix",
   };
-  const { data: settings } = await supabase
-    .from("company_settings")
-    .select("repair_job_prefix,quotation_prefix,invoice_prefix,receipt_prefix,purchase_prefix,cash_bill_prefix")
-    .is("deleted_at", null)
-    .limit(1)
-    .maybeSingle();
-  const configuredPrefix = String((settings as Record<string, unknown> | null)?.[prefixColumn[prefix]] ?? prefix);
+  const settings = await getLatestCompanySettings(supabase);
+  const configuredPrefix = String(settings?.[prefixColumn[prefix]] ?? prefix);
 
   const { data, error } = await supabase.rpc("next_document_number", { p_prefix: configuredPrefix });
   if (error) throw error;

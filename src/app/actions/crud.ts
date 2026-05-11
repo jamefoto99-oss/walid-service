@@ -58,11 +58,77 @@ async function ensureStockAvailable(items: LineItemInput[]) {
   }
 }
 
+function partQuantityMap(items: Array<LineItemInput | Record<string, unknown>>) {
+  const totals = new Map<string, number>();
+  for (const item of items) {
+    if (String(item.item_type ?? "") !== "part" || !item.part_id) continue;
+    const partId = String(item.part_id);
+    totals.set(partId, (totals.get(partId) ?? 0) + toNumber(item.quantity));
+  }
+  return totals;
+}
+
+function partPriceMap(items: Array<LineItemInput | Record<string, unknown>>) {
+  const prices = new Map<string, number>();
+  for (const item of items) {
+    if (String(item.item_type ?? "") !== "part" || !item.part_id) continue;
+    prices.set(String(item.part_id), toNumber(item.unit_price));
+  }
+  return prices;
+}
+
+async function applyCashBillStockDeltas(
+  documentId: string,
+  documentNo: string,
+  oldItems: Record<string, unknown>[],
+  newItems: LineItemInput[],
+  actor: string | null,
+) {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase is not configured");
+
+  const oldQuantities = partQuantityMap(oldItems);
+  const newQuantities = partQuantityMap(newItems);
+  const oldPrices = partPriceMap(oldItems);
+  const newPrices = partPriceMap(newItems);
+  const partIds = Array.from(new Set([...oldQuantities.keys(), ...newQuantities.keys()]));
+  if (!partIds.length) return;
+
+  const { data, error } = await supabase.from("parts").select("id,name,quantity_on_hand").in("id", partIds);
+  if (error) throw new Error(error.message);
+
+  const partsById = new Map((data ?? []).map((part) => [String(part.id), part]));
+  for (const partId of partIds) {
+    const part = partsById.get(partId);
+    if (!part) throw new Error("ไม่พบอะไหล่ที่อยู่ในบิลเงินสด");
+
+    const delta = toNumber(newQuantities.get(partId)) - toNumber(oldQuantities.get(partId));
+    if (delta === 0) continue;
+    const currentStock = toNumber(part.quantity_on_hand);
+    if (delta > 0 && currentStock < delta) {
+      throw new Error(`สต๊อก ${part.name} ไม่พอสำหรับตัดใช้`);
+    }
+
+    const nextStock = currentStock - delta;
+    await supabase.from("parts").update({ quantity_on_hand: nextStock }).eq("id", partId);
+    await supabase.from("stock_movements").insert({
+      part_id: partId,
+      movement_type: delta > 0 ? "use" : "return",
+      quantity: -delta,
+      unit_cost: delta > 0 ? toNumber(newPrices.get(partId)) : toNumber(oldPrices.get(partId)),
+      reference_type: "cash_bill",
+      reference_id: documentId,
+      notes: `ปรับสต๊อกจากการแก้ไขบิลเงินสด ${documentNo}`,
+      created_by: actor,
+    });
+  }
+}
+
 async function createLineItems(
   moduleKey: ModuleKey,
   documentId: string,
   items: LineItemInput[],
-  options?: { documentNo?: string },
+  options?: { documentNo?: string; skipStock?: boolean },
 ) {
   const supabase = await createSupabaseServerClient();
   if (!supabase) throw new Error("Supabase is not configured");
@@ -119,7 +185,7 @@ async function createLineItems(
     );
   }
 
-  if (moduleKey === "invoices" || moduleKey === "cash-bills") {
+  if (!options?.skipStock && (moduleKey === "invoices" || moduleKey === "cash-bills")) {
     for (const item of items.filter((entry) => entry.item_type === "part" && entry.part_id)) {
       const { data: part } = await supabase
         .from("parts")
@@ -206,6 +272,88 @@ async function createCashBill(payload: Record<string, unknown>, items: LineItemI
   revalidatePath("/income");
   revalidatePath(`/print/cash-bills/${data.id}`);
   return { ok: true, message: `ออกบิลเงินสด ${data.cash_bill_no} แล้ว` };
+}
+
+async function updateCashBill(id: string, payload: Record<string, unknown>): Promise<ActionResult> {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return { ok: false, error: "ยังไม่ได้ตั้งค่า Supabase" };
+
+  const { data: existing, error: existingError } = await supabase
+    .from("cash_bills")
+    .select("id,cash_bill_no,issued_at,payment_method")
+    .eq("id", id)
+    .maybeSingle();
+  if (existingError || !existing) return { ok: false, error: "ไม่พบบิลเงินสดที่ต้องการแก้ไข" };
+
+  const items = parseLineItems(payload.items);
+  const discount = toNumber(payload.discount);
+  const { subtotal, total } = sumLineItems(items, discount);
+  const actor = await currentActorId();
+  const [oldItems, customerResult, vehicleResult] = await Promise.all([
+    supabase.from("cash_bill_items").select("*").eq("cash_bill_id", id),
+    payload.customer_id
+      ? supabase.from("customers").select("full_name,phone,address").eq("id", String(payload.customer_id)).maybeSingle()
+      : Promise.resolve({ data: null }),
+    payload.vehicle_id
+      ? supabase.from("vehicles").select("license_plate,province,brand,model,color").eq("id", String(payload.vehicle_id)).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+  if (oldItems.error) return { ok: false, error: oldItems.error.message };
+
+  const customer = customerResult.data as Record<string, unknown> | null;
+  const vehicle = vehicleResult.data as Record<string, unknown> | null;
+  const vehicleLabel = vehicle
+    ? [vehicle.license_plate, vehicle.province, vehicle.brand, vehicle.model, vehicle.color].filter(Boolean).join(" ")
+    : "";
+  const billPayload: Record<string, unknown> = {
+    ...payload,
+    customer_name: payload.customer_name || customer?.full_name || "ลูกค้าเงินสด",
+    customer_phone: payload.customer_phone || customer?.phone || null,
+    customer_address: payload.customer_address || customer?.address || null,
+    vehicle_text: payload.vehicle_text || vehicleLabel || null,
+    subtotal,
+    discount,
+    total,
+  };
+  delete billPayload.items;
+
+  await applyCashBillStockDeltas(
+    id,
+    String(existing.cash_bill_no),
+    (oldItems.data ?? []) as Record<string, unknown>[],
+    items,
+    actor,
+  );
+
+  const { error } = await supabase.from("cash_bills").update(billPayload).eq("id", id);
+  if (error) return { ok: false, error: error.message };
+
+  await supabase.from("cash_bill_items").delete().eq("cash_bill_id", id);
+  await createLineItems("cash-bills", id, items, { documentNo: String(existing.cash_bill_no), skipStock: true });
+
+  const incomePayload = {
+    recorded_at: payload.issued_at ?? existing.issued_at ?? new Date().toISOString().slice(0, 10),
+    category: "repair_service",
+    description: `บิลเงินสด ${String(existing.cash_bill_no)}`,
+    amount: total,
+    payment_method: payload.payment_method ?? existing.payment_method ?? "cash",
+    reference_no: String(existing.cash_bill_no),
+    cash_bill_id: id,
+    created_by: actor,
+  };
+  const { data: income } = await supabase.from("income_records").select("id").eq("cash_bill_id", id).limit(1).maybeSingle();
+  if (income?.id) {
+    await supabase.from("income_records").update(incomePayload).eq("id", income.id);
+  } else {
+    await supabase.from("income_records").insert(incomePayload);
+  }
+
+  await logActivity("update_cash_bill", "cash_bills", id, billPayload);
+  revalidatePath("/");
+  revalidatePath("/cash-bills");
+  revalidatePath("/income");
+  revalidatePath(`/print/cash-bills/${id}`);
+  return { ok: true, message: `แก้ไขบิลเงินสด ${String(existing.cash_bill_no)} แล้ว` };
 }
 
 async function createReceipt(payload: Record<string, unknown>): Promise<ActionResult> {
@@ -324,6 +472,8 @@ export async function updateRecord(moduleKey: ModuleKey, id: string, input: Reco
     if (!supabase) return { ok: false, error: "ยังไม่ได้ตั้งค่า Supabase" };
 
     const payload = validateModuleInput(moduleKey, input);
+    if (moduleKey === "cash-bills") return await updateCashBill(id, payload);
+
     delete payload.items;
 
     const { error } = await supabase.from(config.table).update(payload).eq("id", id);

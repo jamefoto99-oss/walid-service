@@ -15,6 +15,7 @@ const actionLabels: Record<string, string> = {
   approve_delete_approval: "อนุมัติคำขอลบข้อมูล",
   convert_quotation_to_invoice: "แปลงใบเสนอราคาเป็นใบแจ้งหนี้",
   create: "สร้างข้อมูล",
+  create_cash_bill: "ออกบิลเงินสด",
   create_purchase: "สร้างใบซื้อและรับสต๊อก",
   create_receipt: "ออกใบเสร็จรับเงิน",
   pay_supplier_purchase: "จ่ายชำระ Supplier",
@@ -25,6 +26,7 @@ const actionLabels: Record<string, string> = {
   seed: "สร้างข้อมูลตั้งต้น",
   seed_smoke: "ทดสอบข้อมูลตั้งต้น",
   update: "แก้ไขข้อมูล",
+  update_cash_bill: "แก้ไขบิลเงินสด",
   update_quotation_status: "เปลี่ยนสถานะใบเสนอราคา",
   use_part: "เบิกใช้อะไหล่",
   void_invoice: "ยกเลิกใบแจ้งหนี้",
@@ -33,6 +35,7 @@ const actionLabels: Record<string, string> = {
 };
 
 const tableLabels: Record<string, string> = {
+  cash_bills: "บิลเงินสด",
   company_settings: "ตั้งค่ากิจการ",
   invoices: "ใบแจ้งหนี้",
   parts: "อะไหล่",
