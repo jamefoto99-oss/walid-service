@@ -180,6 +180,7 @@ export async function convertQuotationToInvoice(quotationId: string): Promise<Ac
         part_id: item.part_id,
         description: item.description,
         quantity: item.quantity,
+        unit: item.unit ?? "ชิ้น",
         unit_price: item.unit_price,
         discount: item.discount,
         total: item.total,

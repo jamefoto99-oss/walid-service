@@ -97,6 +97,7 @@ function FieldControl({
   references: ReferenceData;
 }) {
   const baseClass = "mt-1 min-h-11 w-full rounded-md border border-border bg-white px-3 py-2 text-sm outline-none focus:border-primary";
+  const listId = field.options?.length && field.type !== "select" ? `${field.name}-options` : undefined;
 
   if (field.type === "textarea") {
     return <textarea className={cn(baseClass, "min-h-24")} placeholder={field.placeholder} {...register(field.name)} />;
@@ -117,14 +118,26 @@ function FieldControl({
   }
 
   return (
-    <input
-      className={baseClass}
-      type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"}
-      min={field.min}
-      step={field.step}
-      placeholder={field.placeholder}
-      {...register(field.name)}
-    />
+    <>
+      <input
+        className={baseClass}
+        type={field.type === "number" ? "number" : field.type === "date" ? "date" : "text"}
+        min={field.min}
+        step={field.step}
+        list={listId}
+        placeholder={field.placeholder}
+        {...register(field.name)}
+      />
+      {listId ? (
+        <datalist id={listId}>
+          {field.options?.map((option) => (
+            <option key={`${field.name}-${option.value}`} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </datalist>
+      ) : null}
+    </>
   );
 }
 
@@ -312,7 +325,7 @@ function EntityFormDialog({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [items, setItems] = useState<LineItemInput[]>([
-    { item_type: "labor", description: "", quantity: 1, unit_price: 0, discount: 0 },
+    { item_type: "labor", description: "", quantity: 1, unit: "ชิ้น", unit_price: 0, discount: 0 },
   ]);
   const schema = useMemo(() => buildModuleSchema(config), [config]);
   const form = useForm<Record<string, unknown>>({

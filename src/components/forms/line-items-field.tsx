@@ -1,6 +1,7 @@
 "use client";
 
 import { Plus, Trash2 } from "lucide-react";
+import { unitOptions } from "@/lib/constants";
 import type { FieldOption, LineItemInput } from "@/lib/types";
 import { formatCurrency, toNumber } from "@/lib/utils";
 import { Button } from "../ui/button";
@@ -9,6 +10,7 @@ const blankItem: LineItemInput = {
   item_type: "labor",
   description: "",
   quantity: 1,
+  unit: "ชิ้น",
   unit_price: 0,
   discount: 0,
 };
@@ -22,8 +24,20 @@ export function LineItemsField({
   onChange: (items: LineItemInput[]) => void;
   partOptions: FieldOption[];
 }) {
+  const unitListId = "line-item-unit-options";
+
   function update(index: number, patch: Partial<LineItemInput>) {
     onChange(items.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)));
+  }
+
+  function selectPart(index: number, partId: string, label?: string) {
+    const part = partOptions.find((option) => option.value === partId);
+    const currentItem = items[index];
+    update(index, {
+      part_id: partId || null,
+      description: currentItem.description || (partId ? label || part?.label || "" : ""),
+      unit: String(partId ? part?.meta?.unit ?? currentItem.unit ?? "ชิ้น" : currentItem.unit ?? "ชิ้น"),
+    });
   }
 
   function remove(index: number) {
@@ -48,6 +62,13 @@ export function LineItemsField({
       </div>
 
       <div className="space-y-3">
+        <datalist id={unitListId}>
+          {unitOptions.map((option) => (
+            <option key={option.label} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </datalist>
         {items.map((item, index) => (
           <div key={index} className="grid gap-2 rounded-md border border-border bg-surface p-3 md:grid-cols-12">
             <select
@@ -69,7 +90,7 @@ export function LineItemsField({
               <select
                 className="h-10 rounded-md border border-border bg-white px-3 text-sm md:col-span-2"
                 value={item.part_id ?? ""}
-                onChange={(event) => update(index, { part_id: event.target.value, description: item.description || event.target.selectedOptions[0]?.text })}
+                onChange={(event) => selectPart(index, event.target.value, event.target.selectedOptions[0]?.text)}
               >
                 <option value="">เลือกอะไหล่</option>
                 {partOptions.map((part) => (
@@ -88,6 +109,13 @@ export function LineItemsField({
               step="0.01"
               value={item.quantity}
               onChange={(event) => update(index, { quantity: toNumber(event.target.value) })}
+            />
+            <input
+              className="h-10 rounded-md border border-border bg-white px-3 text-sm md:col-span-1"
+              list={unitListId}
+              placeholder="หน่วย"
+              value={item.unit ?? "ชิ้น"}
+              onChange={(event) => update(index, { unit: event.target.value })}
             />
             <input
               className="h-10 rounded-md border border-border bg-white px-3 text-sm md:col-span-1"

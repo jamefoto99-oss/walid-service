@@ -100,12 +100,13 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
       : [
           {
             table: {
-              widths: ["*", 45, 70, 70, 80],
+              widths: ["*", 40, 40, 65, 65, 75],
               body: [
-                ["รายการ", "จำนวน", "ราคา", "ส่วนลด", "รวม"],
+                ["รายการ", "จำนวน", "หน่วย", "ราคา", "ส่วนลด", "รวม"],
                 ...items.map((item) => [
                   String(item.description ?? "-"),
                   String(item.quantity ?? 1),
+                  String(item.unit ?? "ชิ้น"),
                   formatCurrency(item.unit_price),
                   formatCurrency(item.discount),
                   formatCurrency(item.total),
@@ -229,8 +230,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
       {
         margin: [0, 70, 0, 0],
         columns: [
-          { text: "____________________________\nลายเซ็นลูกค้า", alignment: "center" },
-          { text: "____________________________\nลายเซ็นผู้รับผิดชอบ", alignment: "center" },
+          { text: "____________________________\nผู้จ่ายเงิน", alignment: "center" },
+          { text: "____________________________\nผู้รับเงิน", alignment: "center" },
         ],
       },
     ],

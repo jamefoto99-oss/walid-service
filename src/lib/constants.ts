@@ -11,6 +11,80 @@ export const allRoles: UserRole[] = ["owner", "manager", "staff", "accountant"];
 export const financeRoles: UserRole[] = ["owner", "manager", "accountant"];
 export const operationRoles: UserRole[] = ["owner", "manager", "staff"];
 
+export const unitOptions: FieldOption[] = [
+  { label: "ชิ้น", value: "ชิ้น" },
+  { label: "อัน", value: "อัน" },
+  { label: "ชุด", value: "ชุด" },
+  { label: "คู่", value: "คู่" },
+  { label: "ข้าง", value: "ข้าง" },
+  { label: "เส้น", value: "เส้น" },
+  { label: "กล่อง", value: "กล่อง" },
+  { label: "กระป๋อง", value: "กระป๋อง" },
+  { label: "ลิตร", value: "ลิตร" },
+  { label: "เมตร", value: "เมตร" },
+  { label: "กิโลกรัม", value: "กิโลกรัม" },
+  { label: "อื่น ๆ", value: "อื่น ๆ" },
+];
+
+export const vehicleBrandOptions: FieldOption[] = [
+  "Toyota",
+  "Honda",
+  "Isuzu",
+  "Mitsubishi",
+  "Nissan",
+  "Mazda",
+  "Ford",
+  "Chevrolet",
+  "Suzuki",
+  "MG",
+  "Hyundai",
+  "Kia",
+  "Mercedes-Benz",
+  "BMW",
+  "Volvo",
+  "Hino",
+  "Fuso",
+  "UD Trucks",
+  "อื่น ๆ",
+].map((value) => ({ label: value, value }));
+
+export const vehicleModelOptions: FieldOption[] = [
+  "Hilux Revo",
+  "Hilux Vigo",
+  "Fortuner",
+  "Yaris",
+  "Vios",
+  "Corolla Altis",
+  "Camry",
+  "City",
+  "Civic",
+  "CR-V",
+  "Jazz",
+  "D-Max",
+  "MU-X",
+  "Triton",
+  "Pajero Sport",
+  "Navara",
+  "Almera",
+  "March",
+  "BT-50",
+  "Ranger",
+  "Everest",
+  "Colorado",
+  "Swift",
+  "Ciaz",
+  "ZS",
+  "HS",
+  "H-1",
+  "Carnival",
+  "อื่น ๆ",
+].map((value) => ({ label: value, value }));
+
+export const vehicleYearOptions: FieldOption[] = Array.from({ length: 37 }, (_, index) => {
+  const value = String(2026 - index);
+  return { label: value, value };
+});
+
 export const repairStatuses: FieldOption[] = [
   { label: "รับรถแล้ว", value: "received" },
   { label: "รอตรวจเช็ก", value: "diagnosing" },
@@ -129,9 +203,9 @@ export const modules: Record<string, ModuleConfig> = {
       { name: "customer_id", label: "เจ้าของรถ", type: "select", optionsKey: "customers", required: true },
       { name: "license_plate", label: "ทะเบียนรถ", type: "text", required: true },
       { name: "province", label: "จังหวัดทะเบียน", type: "text" },
-      { name: "brand", label: "ยี่ห้อ", type: "text", required: true },
-      { name: "model", label: "รุ่น", type: "text", required: true },
-      { name: "year", label: "ปีรถ", type: "number" },
+      { name: "brand", label: "ยี่ห้อ", type: "text", required: true, options: vehicleBrandOptions },
+      { name: "model", label: "รุ่น", type: "text", required: true, options: vehicleModelOptions },
+      { name: "year", label: "ปีรถ", type: "number", options: vehicleYearOptions },
       { name: "color", label: "สี", type: "text" },
       { name: "mileage", label: "เลขไมล์", type: "number" },
       { name: "vin", label: "เลขตัวถัง", type: "text" },
@@ -189,7 +263,7 @@ export const modules: Record<string, ModuleConfig> = {
       { name: "cost_price", label: "ราคาทุน", type: "number", required: true, step: "0.01" },
       { name: "sale_price", label: "ราคาขาย", type: "number", required: true, step: "0.01" },
       { name: "quantity_on_hand", label: "จำนวนคงเหลือ", type: "number", required: true },
-      { name: "unit", label: "หน่วยนับ", type: "text", required: true },
+      { name: "unit", label: "หน่วยนับ", type: "text", required: true, options: unitOptions },
       { name: "supplier_id", label: "Supplier", type: "select", optionsKey: "suppliers" },
       { name: "low_stock_threshold", label: "จุดแจ้งเตือน", type: "number" },
       { name: "notes", label: "หมายเหตุ", type: "textarea" },

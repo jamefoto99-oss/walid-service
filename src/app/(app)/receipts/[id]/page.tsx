@@ -239,7 +239,7 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
               },
             },
             { header: "ประเภท", cell: (row) => itemTypeLabels[String(row.item_type)] ?? text(row.item_type) },
-            { header: "จำนวน", cell: (row) => text(row.quantity), className: "px-4 py-3 text-right" },
+            { header: "จำนวน", cell: (row) => `${text(row.quantity)} ${text(row.unit ?? nested(row, "parts")?.unit ?? "ชิ้น")}`, className: "px-4 py-3 text-right" },
             { header: "ราคา/หน่วย", cell: (row) => formatCurrency(row.unit_price), className: "px-4 py-3 text-right" },
             { header: "ส่วนลด", cell: (row) => formatCurrency(row.discount), className: "px-4 py-3 text-right" },
             { header: "รวม", cell: (row) => formatCurrency(row.total), className: "px-4 py-3 text-right font-semibold" },

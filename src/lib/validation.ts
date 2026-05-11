@@ -17,6 +17,12 @@ export const lineItemSchema = z.object({
     .trim()
     .transform((value) => value || "รายการ"),
   quantity: z.coerce.number().min(0.01, "จำนวนต้องมากกว่า 0"),
+  unit: z
+    .string()
+    .trim()
+    .optional()
+    .nullable()
+    .transform((value) => value || "ชิ้น"),
   unit_price: z.coerce.number().min(0, "ราคาต้องไม่ติดลบ"),
   discount: z.coerce.number().min(0, "ส่วนลดต้องไม่ติดลบ").default(0),
   part_id: z.string().optional().nullable(),

@@ -19,6 +19,7 @@ export type FieldType =
 export type FieldOption = {
   label: string;
   value: string;
+  meta?: Record<string, string | number | boolean | null | undefined>;
 };
 
 export type FieldConfig = {
@@ -128,6 +129,7 @@ export type LineItemInput = {
   item_type: "labor" | "part" | "other";
   description: string;
   quantity: number;
+  unit: string;
   unit_price: number;
   discount: number;
   part_id?: string | null;

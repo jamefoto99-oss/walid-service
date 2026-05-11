@@ -135,6 +135,7 @@ export function DocumentPrint({
                 <tr className="border-b border-zinc-300 text-left">
                   <th className="py-2">รายการ</th>
                   <th className="py-2 text-right">จำนวน</th>
+                  <th className="py-2 text-right">หน่วย</th>
                   <th className="py-2 text-right">ราคา</th>
                   <th className="py-2 text-right">ส่วนลด</th>
                   <th className="py-2 text-right">รวม</th>
@@ -145,6 +146,7 @@ export function DocumentPrint({
                   <tr className="border-b border-zinc-200" key={String(item.id)}>
                     <td className="py-3">{String(item.description ?? "-")}</td>
                     <td className="py-3 text-right">{String(item.quantity ?? 1)}</td>
+                    <td className="py-3 text-right">{String(item.unit ?? "ชิ้น")}</td>
                     <td className="py-3 text-right">{formatCurrency(item.unit_price)}</td>
                     <td className="py-3 text-right">{formatCurrency(item.discount)}</td>
                     <td className="py-3 text-right">{formatCurrency(item.total)}</td>
@@ -177,8 +179,8 @@ export function DocumentPrint({
         </section>
 
         <footer className="mt-12 grid gap-10 md:grid-cols-2">
-          <div className="border-t border-zinc-400 pt-3 text-center text-sm">ลายเซ็นลูกค้า</div>
-          <div className="border-t border-zinc-400 pt-3 text-center text-sm">ลายเซ็นผู้รับผิดชอบ</div>
+          <div className="border-t border-zinc-400 pt-3 text-center text-sm">ผู้จ่ายเงิน</div>
+          <div className="border-t border-zinc-400 pt-3 text-center text-sm">ผู้รับเงิน</div>
         </footer>
       </section>
     </main>

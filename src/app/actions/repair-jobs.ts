@@ -230,6 +230,7 @@ export async function createQuotationFromRepairJob(jobId: string): Promise<Actio
         item_type: String(item.title ?? "").startsWith("อะไหล่:") ? "part" : "labor",
         description: [item.title, item.description].filter(Boolean).join(" - "),
         quantity: item.quantity,
+        unit: "ชิ้น",
         unit_price: item.labor_price,
         discount: item.discount,
         total: item.total,
