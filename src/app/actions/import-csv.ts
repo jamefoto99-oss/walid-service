@@ -73,8 +73,13 @@ function compact(value: unknown) {
   return String(value ?? "").trim();
 }
 
+function isEmptyCsvValue(value: unknown) {
+  const text = compact(value);
+  return !text || text === "-" || text === "—";
+}
+
 function isBlankRow(row: string[]) {
-  return row.every((cell) => !compact(cell));
+  return row.every((cell) => isEmptyCsvValue(cell));
 }
 
 function parseCsv(content: string) {
@@ -142,17 +147,17 @@ function csvToRows(content: string) {
 function cell(row: CsvRow, fieldAliases: string[]) {
   for (const fieldAlias of fieldAliases) {
     const value = row.values.get(normalizeHeader(fieldAlias));
-    if (value) return value;
+    if (!isEmptyCsvValue(value)) return compact(value);
   }
   return "";
 }
 
 function optionalText(value: string) {
-  return value ? value : null;
+  return isEmptyCsvValue(value) ? null : compact(value);
 }
 
 function parseRequiredNumber(value: string, line: number, label: string, errors: string[]) {
-  const normalized = value.replace(/,/g, "").trim();
+  const normalized = isEmptyCsvValue(value) ? "" : value.replace(/,/g, "").trim();
   const number = Number(normalized);
   if (!normalized || !Number.isFinite(number) || number < 0) {
     errors.push(`แถว ${line}: ${label} ต้องเป็นตัวเลข 0 ขึ้นไป`);
@@ -162,7 +167,7 @@ function parseRequiredNumber(value: string, line: number, label: string, errors:
 }
 
 function parseOptionalNumber(value: string, line: number, label: string, errors: string[], fallback: number | null) {
-  const normalized = value.replace(/,/g, "").trim();
+  const normalized = isEmptyCsvValue(value) ? "" : value.replace(/,/g, "").trim();
   if (!normalized) return fallback;
   const number = Number(normalized);
   if (!Number.isFinite(number) || number < 0) {
@@ -180,6 +185,14 @@ function parseOptionalInteger(value: string, line: number, label: string, errors
 function requireValue(value: string, line: number, label: string, errors: string[]) {
   if (!value) errors.push(`แถว ${line}: กรุณาระบุ ${label}`);
   return value;
+}
+
+function importFallbackCode(prefix: string, line: number) {
+  return `${prefix}-${Date.now().toString(36).toUpperCase()}-${line}`;
+}
+
+function textOrFallback(value: string, fallback: string) {
+  return isEmptyCsvValue(value) ? fallback : compact(value);
 }
 
 function findDuplicates(values: string[]) {
@@ -250,14 +263,11 @@ async function importCustomers(supabase: SupabaseClient, profile: Profile, rows:
   return { ok: true, message: `นำเข้าลูกค้า ${records.length.toLocaleString("th-TH")} รายการแล้ว` };
 }
 
-async function resolveCustomers(supabase: SupabaseClient, rows: CsvRow[], errors: string[]) {
+async function resolveCustomers(supabase: SupabaseClient, rows: CsvRow[]) {
   const customerIds = [...new Set(rows.map((row) => cell(row, aliases.customerId)).filter(Boolean))];
   const customerPhones = [...new Set(rows.map((row) => cell(row, aliases.customerPhone)).filter(Boolean))];
   const customerNames = [...new Set(rows.map((row) => cell(row, aliases.fullName)).filter(Boolean))];
 
-  customerIds.forEach((id) => {
-    if (!uuidPattern.test(id)) errors.push(`customer_id ไม่ถูกต้อง: ${id}`);
-  });
   const validCustomerIds = customerIds.filter((id) => uuidPattern.test(id));
 
   const byId = new Map<string, string>();
@@ -283,8 +293,7 @@ async function resolveCustomers(supabase: SupabaseClient, rows: CsvRow[], errors
     if (error) throw new Error(error.message);
     (data ?? []).forEach((customer) => {
       const key = normalizeKey(String(customer.phone ?? ""));
-      if (byPhone.has(key)) errors.push(`พบลูกค้าเบอร์ ${customer.phone} มากกว่า 1 รายในระบบ`);
-      byPhone.set(key, String(customer.id));
+      if (!byPhone.has(key)) byPhone.set(key, String(customer.id));
     });
   }
 
@@ -297,44 +306,103 @@ async function resolveCustomers(supabase: SupabaseClient, rows: CsvRow[], errors
     if (error) throw new Error(error.message);
     (data ?? []).forEach((customer) => {
       const key = normalizeKey(String(customer.full_name ?? ""));
-      if (byName.has(key)) errors.push(`พบลูกค้าชื่อ ${customer.full_name} มากกว่า 1 รายในระบบ`);
-      byName.set(key, String(customer.id));
+      if (!byName.has(key)) byName.set(key, String(customer.id));
     });
   }
 
   return { byId, byPhone, byName };
 }
 
+function vehicleCustomerKey(row: CsvRow) {
+  const customerId = cell(row, aliases.customerId);
+  const customerPhone = cell(row, aliases.customerPhone);
+  const customerName = cell(row, aliases.fullName);
+
+  if (customerId && uuidPattern.test(customerId)) return `id:${customerId}`;
+  if (customerPhone) return `phone:${normalizeKey(customerPhone)}`;
+  if (customerName) return `name:${normalizeKey(customerName)}`;
+  return "placeholder:vehicle-import";
+}
+
+function resolveVehicleCustomerId(
+  row: CsvRow,
+  customerMaps: Awaited<ReturnType<typeof resolveCustomers>>,
+  createdCustomers: Map<string, string>,
+) {
+  const customerId = cell(row, aliases.customerId);
+  const customerPhone = cell(row, aliases.customerPhone);
+  const customerName = cell(row, aliases.fullName);
+
+  return (
+    (customerId && uuidPattern.test(customerId) ? customerMaps.byId.get(customerId) : null) ??
+    (customerPhone ? customerMaps.byPhone.get(normalizeKey(customerPhone)) : null) ??
+    (customerName ? customerMaps.byName.get(normalizeKey(customerName)) : null) ??
+    createdCustomers.get(vehicleCustomerKey(row)) ??
+    ""
+  );
+}
+
+async function createMissingVehicleCustomers(
+  supabase: SupabaseClient,
+  profile: Profile,
+  rows: CsvRow[],
+  customerMaps: Awaited<ReturnType<typeof resolveCustomers>>,
+) {
+  const pending = new Map<string, { full_name: string; phone: string; notes: string; created_by: string }>();
+
+  rows.forEach((row) => {
+    if (resolveVehicleCustomerId(row, customerMaps, new Map())) return;
+
+    const key = vehicleCustomerKey(row);
+    if (pending.has(key)) return;
+
+    const customerName = cell(row, aliases.fullName);
+    const customerPhone = cell(row, aliases.customerPhone);
+    pending.set(key, {
+      full_name: textOrFallback(customerName, "ไม่ระบุ"),
+      phone: textOrFallback(customerPhone, ""),
+      notes: "สร้างอัตโนมัติจากการ import ข้อมูลรถ CSV",
+      created_by: profile.id,
+    });
+  });
+
+  if (!pending.size) return new Map<string, string>();
+
+  const entries = [...pending.entries()];
+  const { data, error } = await supabase
+    .from("customers")
+    .insert(entries.map(([, record]) => record))
+    .select("id");
+  if (error) throw new Error(error.message);
+
+  const created = new Map<string, string>();
+  entries.forEach(([key], index) => {
+    const id = String(data?.[index]?.id ?? "");
+    if (id) created.set(key, id);
+  });
+  return created;
+}
+
 async function importVehicles(supabase: SupabaseClient, profile: Profile, rows: CsvRow[], fileName: string) {
   const errors: string[] = [];
-  const customerMaps = await resolveCustomers(supabase, rows, errors);
+  const customerMaps = await resolveCustomers(supabase, rows);
+  const createdCustomers = await createMissingVehicleCustomers(supabase, profile, rows, customerMaps);
   const records = rows.map((row) => {
-    const customerId = cell(row, aliases.customerId);
-    const customerPhone = cell(row, aliases.customerPhone);
-    const customerName = cell(row, aliases.fullName);
-    const resolvedCustomerId =
-      (customerId ? customerMaps.byId.get(customerId) : null) ??
-      (customerPhone ? customerMaps.byPhone.get(normalizeKey(customerPhone)) : null) ??
-      (customerName ? customerMaps.byName.get(normalizeKey(customerName)) : null);
-
-    if (!resolvedCustomerId) {
-      errors.push(`แถว ${row.line}: ไม่พบลูกค้า ให้ใส่ customer_id หรือ customer_phone ที่มีอยู่ในระบบ`);
-    }
-
-    const licensePlate = requireValue(cell(row, aliases.licensePlate), row.line, "ทะเบียนรถ", errors);
+    const resolvedCustomerId = resolveVehicleCustomerId(row, customerMaps, createdCustomers);
+    const licensePlate = textOrFallback(cell(row, aliases.licensePlate), importFallbackCode("CAR", row.line));
     const province = cell(row, aliases.province);
-    const brand = requireValue(cell(row, aliases.brand), row.line, "ยี่ห้อ", errors);
-    const model = requireValue(cell(row, aliases.model), row.line, "รุ่น", errors);
+    const brand = textOrFallback(cell(row, aliases.brand), "ไม่ระบุ");
+    const model = textOrFallback(cell(row, aliases.model), "ไม่ระบุ");
 
     return {
-      customer_id: resolvedCustomerId ?? "",
+      customer_id: resolvedCustomerId,
       license_plate: licensePlate,
       province: optionalText(province),
       brand,
       model,
       year: parseOptionalInteger(cell(row, aliases.year), row.line, "ปีรถ", errors),
       color: optionalText(cell(row, aliases.color)),
-      mileage: parseOptionalInteger(cell(row, aliases.mileage), row.line, "เลขไมล์", errors),
+      mileage: parseOptionalInteger(cell(row, aliases.mileage), row.line, "เลขไมล์", errors) ?? 0,
       vin: optionalText(cell(row, aliases.vin)),
       engine_no: optionalText(cell(row, aliases.engineNo)),
       notes: optionalText(cell(row, aliases.notes)),

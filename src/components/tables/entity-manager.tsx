@@ -47,10 +47,11 @@ const csvTemplates: Record<string, { filename: string; content: string; help: st
   vehicles: {
     filename: "vehicles-template.csv",
     content: [
-      "customer_phone,license_plate,province,brand,model,year,color,mileage,vin,engine_no,notes",
-      "0812345678,กข 1234,ขอนแก่น,Toyota,Vigo,2012,ขาว,185200,VINTEST001,ENG001,รถลูกค้าเดิม",
+      "customer_name,customer_phone,license_plate,province,brand,model,year,color,mileage,vin,engine_no,notes",
+      "สมชาย ใจดี,0812345678,กข 1234,ขอนแก่น,Toyota,Vigo,2012,ขาว,185200,VINTEST001,ENG001,รถลูกค้าเดิม",
+      "-,-,-,-,-,-,-,-,-,-,แถวตัวอย่างที่เว้นข้อมูลได้",
     ].join("\n"),
-    help: "ต้องมี customer_phone หรือ customer_id ที่มีอยู่แล้วในระบบ พร้อม license_plate, brand และ model",
+    help: "ทุกช่องเว้นว่างหรือใส่ - ได้ ถ้าไม่พบลูกค้า ระบบจะสร้างลูกค้าไม่ระบุให้อัตโนมัติ และเติมทะเบียน/ยี่ห้อ/รุ่นเริ่มต้นให้",
   },
   parts: {
     filename: "parts-template.csv",
