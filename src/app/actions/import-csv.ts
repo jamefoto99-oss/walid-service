@@ -65,10 +65,6 @@ function normalizeKey(value: string) {
   return value.trim().toLowerCase();
 }
 
-function normalizePair(first: string, second: string) {
-  return `${normalizeKey(first)}|${normalizeKey(second)}`;
-}
-
 function compact(value: unknown) {
   return String(value ?? "").trim();
 }
@@ -409,27 +405,6 @@ async function importVehicles(supabase: SupabaseClient, profile: Profile, rows: 
       created_by: profile.id,
     };
   });
-
-  findDuplicates(records.map((record) => normalizePair(record.license_plate, record.province ?? ""))).forEach((key) => {
-    errors.push(`ทะเบียนซ้ำในไฟล์: ${key}`);
-  });
-
-  const plates = [...new Set(records.map((record) => record.license_plate).filter(Boolean))];
-  if (plates.length) {
-    const { data, error } = await supabase
-      .from("vehicles")
-      .select("license_plate,province")
-      .in("license_plate", plates);
-    if (error) return { ok: false, error: error.message };
-
-    const importedKeys = new Set(records.map((record) => normalizePair(record.license_plate, record.province ?? "")));
-    (data ?? []).forEach((vehicle) => {
-      const key = normalizePair(String(vehicle.license_plate ?? ""), String(vehicle.province ?? ""));
-      if (importedKeys.has(key)) {
-        errors.push(`พบรถเดิมในระบบ: ${vehicle.license_plate} ${vehicle.province ?? ""}`);
-      }
-    });
-  }
 
   const errorText = collectErrors(errors);
   if (errorText) return { ok: false, error: errorText };

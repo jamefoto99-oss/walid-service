@@ -109,8 +109,7 @@ create table public.vehicles (
   created_by uuid references public.profiles(id),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  deleted_at timestamptz,
-  unique (license_plate, province)
+  deleted_at timestamptz
 );
 
 create table public.repair_jobs (
