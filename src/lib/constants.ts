@@ -159,6 +159,7 @@ export const menuItems = [
   { label: "Backup / Export", href: "/backup", icon: "DatabaseBackup", roles: ["owner"] as UserRole[] },
   { label: "ตั้งค่ากิจการ", href: "/settings", icon: "Settings", roles: ["owner"] as UserRole[] },
   { label: "จัดการผู้ใช้", href: "/users", icon: "ShieldCheck", roles: ["owner"] as UserRole[] },
+  { label: "คู่มือการใช้งาน", href: "/manual", icon: "BookOpenText", roles: allRoles, section: "bottom" },
 ];
 
 export const modules: Record<string, ModuleConfig> = {

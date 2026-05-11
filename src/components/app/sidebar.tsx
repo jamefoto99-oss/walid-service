@@ -6,6 +6,7 @@ import {
   BadgeDollarSign,
   BarChart3,
   Bell,
+  BookOpenText,
   Car,
   ClipboardCheck,
   ClipboardList,
@@ -31,6 +32,7 @@ import { cn } from "@/lib/utils";
 const icons = {
   LayoutDashboard,
   Bell,
+  BookOpenText,
   ClipboardCheck,
   Users,
   Car,
@@ -62,17 +64,19 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const allowedItems = menuItems.filter((item) => item.roles.includes(role));
+  const mainItems = allowedItems.filter((item) => !("section" in item) || item.section !== "bottom");
+  const bottomItems = allowedItems.filter((item) => "section" in item && item.section === "bottom");
 
   return (
-    <aside className="hidden w-72 shrink-0 border-r border-border bg-[#242820] text-white lg:block">
+    <aside className="hidden h-screen w-72 shrink-0 flex-col border-r border-border bg-[#242820] text-white lg:flex">
       <div className="flex h-16 items-center border-b border-white/10 px-5">
         <div>
           <p className="text-lg font-bold">อู่วาลิดการช่าง</p>
           <p className="text-xs text-white/60">Garage ERP</p>
         </div>
       </div>
-      <nav className="space-y-1 p-3">
-        {allowedItems.map((item) => {
+      <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
+        {mainItems.map((item) => {
           const Icon = icons[item.icon as keyof typeof icons];
           const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
           return (
@@ -110,6 +114,28 @@ export function Sidebar({
           );
         })}
       </nav>
+      {bottomItems.length ? (
+        <nav className="border-t border-white/10 p-3">
+          <p className="mb-2 px-3 text-xs font-semibold uppercase tracking-wide text-white/40">Help</p>
+          {bottomItems.map((item) => {
+            const Icon = icons[item.icon as keyof typeof icons];
+            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={cn(
+                  "flex min-h-11 items-center gap-3 rounded-md px-3 text-sm font-medium text-white/75 transition hover:bg-white/10 hover:text-white",
+                  active && "bg-white text-[#242820] hover:bg-white hover:text-[#242820]",
+                )}
+              >
+                <Icon className="h-4 w-4 shrink-0" />
+                <span className="min-w-0 flex-1">{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+      ) : null}
     </aside>
   );
 }

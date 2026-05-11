@@ -16,6 +16,7 @@ const protectedRoutes = [
   "/income",
   "/expenses",
   "/reports",
+  "/manual",
   "/settings",
   "/users",
   "/print",

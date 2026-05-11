@@ -320,8 +320,26 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
       {
         margin: [0, 70, 0, 0],
         columns: [
-          { text: "____________________________\nผู้จ่ายเงิน", alignment: "center" },
-          { text: "____________________________\nผู้รับเงิน", alignment: "center" },
+          {
+            width: "*",
+            stack: [
+              {
+                canvas: [{ type: "line", x1: 36, y1: 0, x2: 226, y2: 0, lineWidth: 1, lineColor: "#71717a" }],
+                margin: [0, 0, 0, 6],
+              },
+              pdfText("ผู้จ่ายเงิน", { alignment: "center" }),
+            ],
+          },
+          {
+            width: "*",
+            stack: [
+              {
+                canvas: [{ type: "line", x1: 36, y1: 0, x2: 226, y2: 0, lineWidth: 1, lineColor: "#71717a" }],
+                margin: [0, 0, 0, 6],
+              },
+              pdfText("ผู้รับเงิน", { alignment: "center" }),
+            ],
+          },
         ],
       },
     ],
