@@ -994,7 +994,7 @@ export async function getDocumentForPrint(type: string, id: string) {
   const customerId = (document as Record<string, unknown>).customer_id ?? invoiceSource?.customer_id;
   const vehicleId = (document as Record<string, unknown>).vehicle_id ?? invoiceSource?.vehicle_id;
   const invoiceId = type === "receipts" ? (document as Record<string, unknown>).invoice_id : id;
-  const [customer, vehicle, quotationItems, invoiceItems] = await Promise.all([
+  const [customer, vehicle, quotationItems, invoiceItems, cashBillItems] = await Promise.all([
     customerId ? supabase.from("customers").select("*").eq("id", String(customerId)).maybeSingle() : Promise.resolve({ data: null }),
     vehicleId ? supabase.from("vehicles").select("*").eq("id", String(vehicleId)).maybeSingle() : Promise.resolve({ data: null }),
     type === "quotations"
@@ -1003,15 +1003,39 @@ export async function getDocumentForPrint(type: string, id: string) {
     type === "invoices" || type === "receipts"
       ? supabase.from("invoice_items").select("*").eq("invoice_id", String(invoiceId)).order("sort_order")
       : Promise.resolve({ data: [] }),
+    type === "cash-bills"
+      ? supabase.from("cash_bill_items").select("*").eq("cash_bill_id", id).order("sort_order")
+      : Promise.resolve({ data: [] }),
   ]);
+  const manualCustomer: Record<string, unknown> | null =
+    type === "cash-bills"
+      ? {
+          full_name: (document as Record<string, unknown>).customer_name,
+          phone: (document as Record<string, unknown>).customer_phone,
+          address: (document as Record<string, unknown>).customer_address,
+        }
+      : null;
+  const manualVehicle: Record<string, unknown> | null =
+    type === "cash-bills"
+      ? {
+          license_plate: (document as Record<string, unknown>).vehicle_text,
+        }
+      : null;
 
   return {
     type,
     document: document as Record<string, unknown>,
     company: settings.data as Record<string, unknown> | null,
-    customer: customer.data as Record<string, unknown> | null,
-    vehicle: vehicle.data as Record<string, unknown> | null,
-    items: type === "quotations" ? quotationItems.data ?? [] : type === "invoices" || type === "receipts" ? invoiceItems.data ?? [] : [],
+    customer: (customer.data as Record<string, unknown> | null) ?? manualCustomer,
+    vehicle: (vehicle.data as Record<string, unknown> | null) ?? manualVehicle,
+    items:
+      type === "quotations"
+        ? quotationItems.data ?? []
+        : type === "invoices" || type === "receipts"
+          ? invoiceItems.data ?? []
+          : type === "cash-bills"
+            ? cashBillItems.data ?? []
+            : [],
   };
 }
 

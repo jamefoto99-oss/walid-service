@@ -21,6 +21,7 @@ import {
   TrendingUp,
   Truck,
   Users,
+  WalletCards,
   Wrench,
 } from "lucide-react";
 import { menuItems } from "@/lib/constants";
@@ -39,6 +40,7 @@ const icons = {
   FileText,
   ReceiptText,
   BadgeDollarSign,
+  WalletCards,
   ShoppingCart,
   TrendingUp,
   TrendingDown,

@@ -475,7 +475,7 @@ export function EntityManager({ config, rows, references, role, initialValues }:
           const original = row.original;
           return (
             <div className="flex justify-end gap-1">
-              {["quotations", "invoices", "receipts"].includes(config.key) ? (
+              {["quotations", "invoices", "receipts", "cash-bills"].includes(config.key) ? (
                 <Link
                   className="inline-flex h-9 w-9 items-center justify-center rounded-md hover:bg-surface-soft"
                   href={`/print/${config.key}/${original.id}`}

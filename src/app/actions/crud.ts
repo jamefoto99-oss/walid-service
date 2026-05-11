@@ -26,10 +26,43 @@ async function logActivity(action: string, tableName: string, recordId: string, 
   });
 }
 
+async function currentActorId() {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return null;
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return user?.id ?? null;
+}
+
+async function ensureStockAvailable(items: LineItemInput[]) {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase is not configured");
+
+  const partItems = items.filter(
+    (entry): entry is LineItemInput & { part_id: string } => entry.item_type === "part" && Boolean(entry.part_id),
+  );
+  if (!partItems.length) return;
+
+  const partIds = Array.from(new Set(partItems.map((item) => item.part_id)));
+  const { data, error } = await supabase.from("parts").select("id,name,quantity_on_hand").in("id", partIds);
+  if (error) throw new Error(error.message);
+
+  const partsById = new Map((data ?? []).map((part) => [String(part.id), part]));
+  for (const item of partItems) {
+    const part = partsById.get(item.part_id);
+    if (!part) throw new Error(`ไม่พบอะไหล่ ${item.description}`);
+    if (toNumber(part.quantity_on_hand) < item.quantity) {
+      throw new Error(`สต๊อก ${part.name} ไม่พอสำหรับตัดใช้`);
+    }
+  }
+}
+
 async function createLineItems(
   moduleKey: ModuleKey,
   documentId: string,
   items: LineItemInput[],
+  options?: { documentNo?: string },
 ) {
   const supabase = await createSupabaseServerClient();
   if (!supabase) throw new Error("Supabase is not configured");
@@ -67,7 +100,26 @@ async function createLineItems(
         sort_order: index + 1,
       })),
     );
+  }
 
+  if (moduleKey === "cash-bills") {
+    await supabase.from("cash_bill_items").insert(
+      items.map((item, index) => ({
+        cash_bill_id: documentId,
+        item_type: item.item_type,
+        part_id: item.part_id || null,
+        description: item.description,
+        quantity: item.quantity,
+        unit: item.unit || "ชิ้น",
+        unit_price: item.unit_price,
+        discount: item.discount,
+        total: item.quantity * item.unit_price - item.discount,
+        sort_order: index + 1,
+      })),
+    );
+  }
+
+  if (moduleKey === "invoices" || moduleKey === "cash-bills") {
     for (const item of items.filter((entry) => entry.item_type === "part" && entry.part_id)) {
       const { data: part } = await supabase
         .from("parts")
@@ -88,12 +140,72 @@ async function createLineItems(
         movement_type: "use",
         quantity: -item.quantity,
         unit_cost: item.unit_price,
-        reference_type: "invoice",
+        reference_type: moduleKey === "cash-bills" ? "cash_bill" : "invoice",
         reference_id: documentId,
-        notes: `ตัดสต๊อกจากใบแจ้งหนี้ ${documentId}`,
+        notes: moduleKey === "cash-bills" ? `ตัดสต๊อกจากบิลเงินสด ${options?.documentNo ?? documentId}` : `ตัดสต๊อกจากใบแจ้งหนี้ ${options?.documentNo ?? documentId}`,
       });
     }
   }
+}
+
+async function createCashBill(payload: Record<string, unknown>, items: LineItemInput[], discount: number): Promise<ActionResult> {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) return { ok: false, error: "ยังไม่ได้ตั้งค่า Supabase" };
+
+  const { subtotal, total } = sumLineItems(items, discount);
+  await ensureStockAvailable(items);
+  const cashBillNo = await nextDocumentNumber("CB");
+  const actor = await currentActorId();
+  const [customerResult, vehicleResult] = await Promise.all([
+    payload.customer_id
+      ? supabase.from("customers").select("full_name,phone,address").eq("id", String(payload.customer_id)).maybeSingle()
+      : Promise.resolve({ data: null }),
+    payload.vehicle_id
+      ? supabase.from("vehicles").select("license_plate,province,brand,model,color").eq("id", String(payload.vehicle_id)).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+  const customer = customerResult.data as Record<string, unknown> | null;
+  const vehicle = vehicleResult.data as Record<string, unknown> | null;
+  const vehicleLabel = vehicle
+    ? [vehicle.license_plate, vehicle.province, vehicle.brand, vehicle.model, vehicle.color].filter(Boolean).join(" ")
+    : "";
+  const billPayload: Record<string, unknown> = {
+    ...payload,
+    cash_bill_no: cashBillNo,
+    customer_name: payload.customer_name || customer?.full_name || "ลูกค้าเงินสด",
+    customer_phone: payload.customer_phone || customer?.phone || null,
+    customer_address: payload.customer_address || customer?.address || null,
+    vehicle_text: payload.vehicle_text || vehicleLabel || null,
+    subtotal,
+    discount,
+    total,
+    created_by: actor,
+  };
+  delete billPayload.items;
+
+  const { data, error } = await supabase.from("cash_bills").insert(billPayload).select("id,cash_bill_no").single();
+  if (error) return { ok: false, error: error.message };
+
+  await createLineItems("cash-bills", data.id, items, { documentNo: data.cash_bill_no });
+
+  const { error: incomeError } = await supabase.from("income_records").insert({
+    recorded_at: payload.issued_at ?? new Date().toISOString().slice(0, 10),
+    category: "repair_service",
+    description: `บิลเงินสด ${data.cash_bill_no}`,
+    amount: total,
+    payment_method: payload.payment_method ?? "cash",
+    reference_no: data.cash_bill_no,
+    cash_bill_id: data.id,
+    created_by: actor,
+  });
+  if (incomeError) return { ok: false, error: incomeError.message };
+
+  await logActivity("create_cash_bill", "cash_bills", data.id, billPayload);
+  revalidatePath("/");
+  revalidatePath("/cash-bills");
+  revalidatePath("/income");
+  revalidatePath(`/print/cash-bills/${data.id}`);
+  return { ok: true, message: `ออกบิลเงินสด ${data.cash_bill_no} แล้ว` };
 }
 
 async function createReceipt(payload: Record<string, unknown>): Promise<ActionResult> {
@@ -164,17 +276,19 @@ export async function createRecord(moduleKey: ModuleKey, input: RecordInput): Pr
 
     const payload = validateModuleInput(moduleKey, input, { applyDefaults: true });
 
-    if (moduleKey === "receipts") return createReceipt(payload);
+    if (moduleKey === "receipts") return await createReceipt(payload);
 
     const documentField = documentNoField(config.table);
     if (config.numberPrefix && documentField) {
       payload[documentField] = await nextDocumentNumber(config.numberPrefix);
     }
 
-    if (moduleKey === "quotations" || moduleKey === "invoices") {
+    if (moduleKey === "quotations" || moduleKey === "invoices" || moduleKey === "cash-bills") {
       const items = parseLineItems(payload.items);
       const discount = toNumber(payload.discount);
+      if (moduleKey === "cash-bills") return await createCashBill(payload, items, discount);
       const { subtotal, total } = sumLineItems(items, discount);
+      if (moduleKey === "invoices") await ensureStockAvailable(items);
       delete payload.items;
       payload.subtotal = subtotal;
       payload.discount = discount;

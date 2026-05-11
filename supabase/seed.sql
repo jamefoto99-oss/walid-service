@@ -1,14 +1,24 @@
 insert into public.company_settings (
   company_name, address, phone, line_id, document_footer,
-  quotation_prefix, invoice_prefix, receipt_prefix, repair_job_prefix
+  quotation_prefix, invoice_prefix, receipt_prefix, repair_job_prefix,
+  cash_bill_prefix, bank_name, bank_logo_url, bank_account_number, bank_account_name
 ) values (
   'อู่วาลิดการช่าง',
   '99/9 หมู่ 4 ตำบลในเมือง อำเภอเมือง จังหวัดขอนแก่น 40000',
   '081-234-5678',
   '@walidgarage',
   'ขอบคุณที่ไว้วางใจอู่วาลิดการช่าง',
-  'QT', 'INV', 'RC', 'JOB'
+  'QT', 'INV', 'RC', 'JOB',
+  'CB', 'ธนาคารกสิกรไทย', null, '123-4-56789-0', 'อู่วาลิดการช่าง'
 ) on conflict do nothing;
+
+update public.company_settings
+set cash_bill_prefix = coalesce(nullif(cash_bill_prefix, ''), 'CB'),
+    bank_name = coalesce(bank_name, 'ธนาคารกสิกรไทย'),
+    bank_account_number = coalesce(bank_account_number, '123-4-56789-0'),
+    bank_account_name = coalesce(bank_account_name, 'อู่วาลิดการช่าง'),
+    updated_at = now()
+where deleted_at is null;
 
 do $$
 declare
@@ -119,6 +129,7 @@ declare
   quote1 uuid := gen_random_uuid();
   inv1 uuid := gen_random_uuid();
   rec1 uuid := gen_random_uuid();
+  cash_bill1 uuid := gen_random_uuid();
   approval1 uuid := gen_random_uuid();
 begin
   select id into admin_id
@@ -218,6 +229,28 @@ begin
     (current_date, 'repair_service', 'รับชำระบางส่วน INV202605-00001', 1500, 'cash', 'RC202605-00001', rec1, admin_id),
     (current_date - interval '3 days', 'parts_sale', 'ขายน้ำมันเครื่อง', 1200, 'transfer', null, null, admin_id);
 
+  insert into public.cash_bills (
+    id, cash_bill_no, issued_at, customer_id, vehicle_id,
+    customer_name, customer_phone, customer_address, vehicle_text,
+    subtotal, discount, total, payment_method, notes, created_by
+  ) values (
+    cash_bill1, 'CB202605-00001', current_date, c2, v2,
+    'สมชาย ใจดี', '086-333-4444', 'อำเภอบ้านไผ่ ขอนแก่น', 'บต 5678 ขอนแก่น Honda City',
+    1500, 0, 1500, 'transfer', 'บิลเงินสดตัวอย่างสำหรับงานด่วน', admin_id
+  );
+
+  insert into public.cash_bill_items (
+    cash_bill_id, item_type, part_id, description, quantity, unit, unit_price, discount, total, sort_order
+  ) values
+    (cash_bill1, 'labor', null, 'ตรวจเช็กระบบเบรกด่วน', 1, 'รายการ', 800, 0, 800, 1),
+    (cash_bill1, 'other', null, 'น้ำมันเบรก', 1, 'ขวด', 700, 0, 700, 2);
+
+  insert into public.income_records (
+    recorded_at, category, description, amount, payment_method, reference_no, cash_bill_id, created_by
+  ) values (
+    current_date, 'repair_service', 'บิลเงินสด CB202605-00001', 1500, 'transfer', 'CB202605-00001', cash_bill1, admin_id
+  );
+
   insert into public.expense_records (recorded_at, category, description, amount, payment_method, supplier_id, created_by) values
     (current_date, 'parts_purchase', 'ซื้อชุดคลัทช์เข้าสต๊อก', 6400, 'transfer', sup1, admin_id),
     (current_date - interval '2 days', 'electricity', 'ค่าไฟเดือนล่าสุด', 2200, 'transfer', null, admin_id);
@@ -250,8 +283,78 @@ begin
     (admin_id, 'request_delete_approval', 'quotations', quote1, jsonb_build_object('approval_id', approval1));
 
   insert into public.document_counters(prefix, running_number)
-  values ('PO', 1)
+  values ('PO', 1), ('CB', 1)
   on conflict (prefix) do update set running_number = greatest(public.document_counters.running_number, 1);
 
-  update public.document_counters set running_number = 1 where prefix in ('JOB','QT','INV','RC');
+  update public.document_counters set running_number = 1 where prefix in ('JOB','QT','INV','RC','CB');
+end $$;
+
+do $$
+declare
+  admin_id uuid;
+  c2 uuid;
+  v2 uuid;
+  cash_bill1 uuid;
+begin
+  select id into admin_id
+  from auth.users
+  where email = 'admin@walidgarage.local'
+  limit 1;
+
+  select id into c2
+  from public.customers
+  where phone = '086-333-4444'
+  order by created_at
+  limit 1;
+
+  if c2 is null then
+    insert into public.customers (full_name, phone, address, line_id, notes, outstanding_balance, created_by)
+    values ('สมชาย ใจดี', '086-333-4444', 'อำเภอบ้านไผ่ ขอนแก่น', 'somchai.auto', 'ลูกค้าบิลเงินสดตัวอย่าง', 0, admin_id)
+    returning id into c2;
+  end if;
+
+  select id into v2
+  from public.vehicles
+  where customer_id = c2 and license_plate = 'บต 5678'
+  order by created_at
+  limit 1;
+
+  if v2 is null then
+    insert into public.vehicles (customer_id, license_plate, province, brand, model, year, color, mileage, created_by)
+    values (c2, 'บต 5678', 'ขอนแก่น', 'Honda', 'City', 2018, 'เทา', 82200, admin_id)
+    returning id into v2;
+  end if;
+
+  if not exists (select 1 from public.cash_bills where cash_bill_no = 'CB202605-00001') then
+    cash_bill1 := gen_random_uuid();
+
+    insert into public.cash_bills (
+      id, cash_bill_no, issued_at, customer_id, vehicle_id,
+      customer_name, customer_phone, customer_address, vehicle_text,
+      subtotal, discount, total, payment_method, notes, created_by
+    ) values (
+      cash_bill1, 'CB202605-00001', current_date, c2, v2,
+      'สมชาย ใจดี', '086-333-4444', 'อำเภอบ้านไผ่ ขอนแก่น', 'บต 5678 ขอนแก่น Honda City',
+      1500, 0, 1500, 'transfer', 'บิลเงินสดตัวอย่างสำหรับงานด่วน', admin_id
+    );
+
+    insert into public.cash_bill_items (
+      cash_bill_id, item_type, part_id, description, quantity, unit, unit_price, discount, total, sort_order
+    ) values
+      (cash_bill1, 'labor', null, 'ตรวจเช็กระบบเบรกด่วน', 1, 'รายการ', 800, 0, 800, 1),
+      (cash_bill1, 'other', null, 'น้ำมันเบรก', 1, 'ขวด', 700, 0, 700, 2);
+
+    insert into public.income_records (
+      recorded_at, category, description, amount, payment_method, reference_no, cash_bill_id, created_by
+    ) values (
+      current_date, 'repair_service', 'บิลเงินสด CB202605-00001', 1500, 'transfer', 'CB202605-00001', cash_bill1, admin_id
+    );
+
+    insert into public.activity_logs (actor_id, action, table_name, record_id, metadata) values
+      (admin_id, 'create_cash_bill', 'cash_bills', cash_bill1, jsonb_build_object('source', 'seed'));
+  end if;
+
+  insert into public.document_counters(prefix, running_number)
+  values ('CB', 1)
+  on conflict (prefix) do update set running_number = greatest(public.document_counters.running_number, 1);
 end $$;

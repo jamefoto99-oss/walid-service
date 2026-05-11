@@ -44,6 +44,7 @@ export type ModuleKey =
   | "quotations"
   | "invoices"
   | "receipts"
+  | "cash-bills"
   | "income"
   | "expenses"
   | "settings"
@@ -59,6 +60,7 @@ export type TableName =
   | "quotations"
   | "invoices"
   | "receipts"
+  | "cash_bills"
   | "income_records"
   | "expense_records"
   | "company_settings"
@@ -82,7 +84,7 @@ export type ModuleConfig = {
   description: string;
   createLabel: string;
   allowCreate?: boolean;
-  numberPrefix?: "JOB" | "QT" | "INV" | "RC" | "PO";
+  numberPrefix?: "JOB" | "QT" | "INV" | "RC" | "PO" | "CB";
   policy: RolePolicy;
   searchFields: string[];
   columns: { key: string; label: string; type?: "money" | "date" | "badge" }[];
@@ -91,7 +93,7 @@ export type ModuleConfig = {
 
 export type ReferenceData = Record<ReferenceKey, FieldOption[]>;
 
-export type RecordInput = Record<string, string | number | null | undefined>;
+export type RecordInput = Record<string, unknown>;
 
 export type ActionResult = {
   ok: boolean;

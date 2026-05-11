@@ -8,6 +8,7 @@ const labels: Record<string, string> = {
   quotations: "ใบเสนอราคา",
   invoices: "ใบแจ้งหนี้",
   receipts: "ใบเสร็จรับเงิน",
+  "cash-bills": "บิลเงินสด",
 };
 
 function documentNumber(type: string, document: Record<string, unknown>) {
@@ -15,7 +16,12 @@ function documentNumber(type: string, document: Record<string, unknown>) {
   if (type === "quotations") return document.quotation_no;
   if (type === "invoices") return document.invoice_no;
   if (type === "receipts") return document.receipt_no;
+  if (type === "cash-bills") return document.cash_bill_no;
   return document.id;
+}
+
+function hasPaymentInfo(company: Record<string, unknown> | null) {
+  return Boolean(company?.bank_name || company?.bank_account_number || company?.bank_account_name);
 }
 
 function isCancelledDocument(document: Record<string, unknown>) {
@@ -170,6 +176,35 @@ export function DocumentPrint({
             </div>
           </section>
         )}
+
+        {type !== "repair-job" && hasPaymentInfo(company) ? (
+          <section className="border-b border-zinc-300 py-6">
+            <h2 className="font-semibold">ช่องทางการชำระเงิน</h2>
+            <div className="mt-3 grid gap-3 rounded-md border border-zinc-200 bg-zinc-50 p-4 text-sm md:grid-cols-[auto_1fr]">
+              <div className="flex h-14 w-14 items-center justify-center rounded-md border border-zinc-200 bg-white">
+                {company?.bank_logo_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img alt="โลโก้ธนาคาร" className="h-10 w-10 object-contain" src={String(company.bank_logo_url)} />
+                ) : (
+                  <span className="text-xs font-bold text-zinc-500">BANK</span>
+                )}
+              </div>
+              <div className="space-y-1">
+                <p>
+                  <span className="font-semibold">ธนาคาร :</span> {String(company?.bank_name ?? "-")}
+                </p>
+                <p>
+                  <span className="font-semibold">เลขที่บัญชี :</span>{" "}
+                  <span className="text-xl font-black text-red-700">{String(company?.bank_account_number ?? "-")}</span>
+                </p>
+                <p>
+                  <span className="font-semibold">ชื่อบัญชี :</span>{" "}
+                  <span className="rounded bg-yellow-100 px-2 py-1 font-bold text-zinc-950">{String(company?.bank_account_name ?? "-")}</span>
+                </p>
+              </div>
+            </div>
+          </section>
+        ) : null}
 
         <section className="py-6">
           <h2 className="font-semibold">หมายเหตุ</h2>

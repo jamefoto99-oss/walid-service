@@ -28,6 +28,8 @@ type ActivityLogsClientProps = {
 const tableLabels: Record<string, string> = {
   activity_logs: "Activity Log",
   backup_exports: "Backup / Export",
+  cash_bill_items: "รายการบิลเงินสด",
+  cash_bills: "บิลเงินสด",
   company_settings: "ตั้งค่ากิจการ",
   customers: "ลูกค้า",
   document_counters: "เลขที่เอกสาร",
@@ -58,6 +60,7 @@ const actionLabels: Record<string, string> = {
   convert_quotation_to_invoice: "แปลงเป็นใบแจ้งหนี้",
   create: "สร้างข้อมูล",
   create_company_settings: "สร้างตั้งค่ากิจการ",
+  create_cash_bill: "ออกบิลเงินสด",
   create_receipt: "ออกใบเสร็จ",
   delete: "ลบข้อมูล",
   export_backup: "Export Backup",

@@ -13,11 +13,16 @@ const settingsSchema = z.object({
   phone: z.string().trim().optional().nullable(),
   line_id: z.string().trim().optional().nullable(),
   document_footer: z.string().trim().optional().nullable(),
+  bank_name: z.string().trim().optional().nullable(),
+  bank_logo_url: z.string().trim().optional().nullable(),
+  bank_account_number: z.string().trim().optional().nullable(),
+  bank_account_name: z.string().trim().optional().nullable(),
   repair_job_prefix: z.string().trim().min(1, "กรุณากรอก Prefix งานซ่อม").max(12),
   quotation_prefix: z.string().trim().min(1, "กรุณากรอก Prefix ใบเสนอราคา").max(12),
   invoice_prefix: z.string().trim().min(1, "กรุณากรอก Prefix ใบแจ้งหนี้").max(12),
   receipt_prefix: z.string().trim().min(1, "กรุณากรอก Prefix ใบเสร็จ").max(12),
   purchase_prefix: z.string().trim().min(1, "กรุณากรอก Prefix ใบซื้อ").max(12),
+  cash_bill_prefix: z.string().trim().min(1, "กรุณากรอก Prefix บิลเงินสด").max(12),
 });
 
 const countersSchema = z.object({
@@ -63,6 +68,7 @@ export async function saveCompanySettings(input: unknown): Promise<ActionResult>
       invoice_prefix: normalizePrefix(payload.invoice_prefix),
       receipt_prefix: normalizePrefix(payload.receipt_prefix),
       purchase_prefix: normalizePrefix(payload.purchase_prefix),
+      cash_bill_prefix: normalizePrefix(payload.cash_bill_prefix),
     };
 
     const { data: current } = await supabase
@@ -86,6 +92,7 @@ export async function saveCompanySettings(input: unknown): Promise<ActionResult>
       normalized.invoice_prefix,
       normalized.receipt_prefix,
       normalized.purchase_prefix,
+      normalized.cash_bill_prefix,
     ];
 
     const { error: counterError } = await supabase.from("document_counters").upsert(

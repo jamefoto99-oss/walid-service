@@ -67,6 +67,8 @@ const RESTORE_CONFIGS: RestoreConfig[] = [
   config("invoices", "id", { mapActorColumns: ["created_by"] }),
   config("invoice_items", "id"),
   config("receipts", "id", { mapActorColumns: ["created_by"] }),
+  config("cash_bills", "id", { mapActorColumns: ["created_by"] }),
+  config("cash_bill_items", "id"),
   config("income_records", "id", { mapActorColumns: ["created_by"] }),
   config("expense_records", "id", { mapActorColumns: ["created_by"] }),
   config("payment_records", "id", { mapActorColumns: ["created_by"] }),

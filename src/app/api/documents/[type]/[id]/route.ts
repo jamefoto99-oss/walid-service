@@ -12,6 +12,7 @@ const labels: Record<string, string> = {
   quotations: "ใบเสนอราคา",
   invoices: "ใบแจ้งหนี้",
   receipts: "ใบเสร็จรับเงิน",
+  "cash-bills": "บิลเงินสด",
 };
 
 let fontsLoaded = false;
@@ -34,6 +35,7 @@ function docNo(type: string, document: Record<string, unknown>) {
   if (type === "quotations") return document.quotation_no;
   if (type === "invoices") return document.invoice_no;
   if (type === "receipts") return document.receipt_no;
+  if (type === "cash-bills") return document.cash_bill_no;
   return document.id;
 }
 
@@ -43,6 +45,10 @@ function isCancelledDocument(document: Record<string, unknown>) {
 
 function cancellationReason(document: Record<string, unknown>) {
   return String(document.void_reason ?? document.notes ?? "เอกสารถูกยกเลิกในระบบ");
+}
+
+function hasPaymentInfo(company: Record<string, unknown> | null) {
+  return Boolean(company?.bank_name || company?.bank_account_number || company?.bank_account_name);
 }
 
 async function logoImageDataUrl(value: unknown) {
@@ -80,6 +86,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
   const { document, company, customer, vehicle, items } = data;
   const cancelled = isCancelledDocument(document);
   const logoDataUrl = await logoImageDataUrl(company?.logo_url);
+  const bankLogoDataUrl = await logoImageDataUrl(company?.bank_logo_url);
   const companyHeader: Content[] = [];
   if (logoDataUrl) companyHeader.push({ image: logoDataUrl, width: 64, margin: [0, 0, 0, 8] });
   companyHeader.push(
@@ -186,6 +193,50 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
         },
       ]
     : [];
+  const paymentContent: Content[] =
+    type !== "repair-job" && hasPaymentInfo(company)
+      ? [
+          {
+            margin: [0, 16, 0, 0],
+            table: {
+              widths: [64, "*"],
+              body: [
+                [
+                  bankLogoDataUrl
+                    ? { image: bankLogoDataUrl, fit: [48, 48], alignment: "center", margin: [0, 4, 0, 0] }
+                    : { text: "BANK", alignment: "center", bold: true, color: "#71717a", margin: [0, 18, 0, 0] },
+                  {
+                    stack: [
+                      { text: "ช่องทางการชำระเงิน", bold: true, margin: [0, 0, 0, 4] },
+                      { text: `ธนาคาร : ${String(company?.bank_name ?? "-")}` },
+                      {
+                        text: `เลขที่บัญชี : ${String(company?.bank_account_number ?? "-")}`,
+                        color: "#b91c1c",
+                        bold: true,
+                        fontSize: 15,
+                      },
+                      {
+                        text: `ชื่อบัญชี : ${String(company?.bank_account_name ?? "-")}`,
+                        background: "#fef3c7",
+                        bold: true,
+                        margin: [0, 2, 0, 0],
+                      },
+                    ],
+                  },
+                ],
+              ],
+            },
+            layout: {
+              hLineColor: () => "#e4e4e7",
+              vLineColor: () => "#e4e4e7",
+              paddingTop: () => 8,
+              paddingBottom: () => 8,
+              paddingLeft: () => 8,
+              paddingRight: () => 8,
+            },
+          },
+        ]
+      : [];
 
   const definition: TDocumentDefinitions = {
     pageSize: "A4",
@@ -225,6 +276,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
         ],
       },
       ...detailContent,
+      ...paymentContent,
       { text: "หมายเหตุ", bold: true, margin: [0, 18, 0, 4] },
       { text: String(document.notes ?? company?.document_footer ?? "-") },
       {

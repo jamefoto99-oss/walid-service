@@ -1,6 +1,6 @@
 # อู่วาลิดการช่าง
 
-ระบบบริหารจัดการอู่ซ่อมรถยนต์แบบ Full-Stack สำหรับงานจริงในอู่: รับรถ เปิดงานซ่อม เสนอราคา วางบิล ออกใบเสร็จ ตัดสต๊อก บันทึกรายรับรายจ่าย และดูรายงานบัญชีหลักโดยไม่รวมระบบภาษี/VAT/e-Tax
+ระบบบริหารจัดการอู่ซ่อมรถยนต์แบบ Full-Stack สำหรับงานจริงในอู่: รับรถ เปิดงานซ่อม เสนอราคา วางบิล ออกใบเสร็จ ออกบิลเงินสด ตัดสต๊อก บันทึกรายรับรายจ่าย และดูรายงานบัญชีหลักโดยไม่รวมระบบภาษี/VAT/e-Tax
 
 ## Tech Stack
 
@@ -25,6 +25,8 @@
 - ใบเสนอราคา: รายการค่าแรง/อะไหล่, approve, convert เป็นใบแจ้งหนี้
 - ใบแจ้งหนี้: รับชำระบางส่วน/เต็มผ่านใบเสร็จ, คำนวณยอดค้าง
 - ใบเสร็จรับเงิน: บันทึก payment record และ income record อัตโนมัติ
+- บิลเงินสด: ออกบิลด่วนแบบไม่บังคับกรอกครบทุกช่อง, เลือกลูกค้า/รถ/งานซ่อมจากระบบหรือพิมพ์เอง, ตัดสต๊อกอะไหล่ และบันทึกรายรับอัตโนมัติ
+- ตั้งค่าบัญชีรับเงินบนเอกสาร: ชื่อธนาคาร, โลโก้ธนาคาร, เลขบัญชี และชื่อบัญชีสำหรับแสดงบนเอกสาร/PDF
 - ยกเลิก/กลับรายการเอกสาร: ใบเสร็จคืนยอดชำระและรายรับ, ใบแจ้งหนี้คืนสต๊อก, ใบซื้อกลับสต๊อกและเจ้าหนี้ พร้อมเหตุผลและ Activity Log
 - รายรับ รายจ่าย และรายงานบัญชีพร้อม CSV export
 - นำเข้า CSV สำหรับลูกค้า รถยนต์ และอะไหล่: ตรวจข้อมูลซ้ำ, ตรวจสิทธิ์, บันทึก Activity Log และตัด stock movement เริ่มต้นสำหรับอะไหล่
@@ -60,7 +62,7 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 `DATABASE_URL` ใช้สำหรับรัน `npm run smoke:e2e` ในเครื่องหรือ staging เท่านั้น ไม่ต้องตั้งเป็น public env และไม่จำเป็นต้องใช้บน client
 
-3. รัน SQL ใน `supabase/migrations` ตามลำดับไฟล์ผ่าน Supabase SQL Editor หรือ Supabase CLI ให้ครบถึง `0009_real_data_notifications.sql`
+3. รัน SQL ใน `supabase/migrations` ตามลำดับไฟล์ผ่าน Supabase SQL Editor หรือ Supabase CLI ให้ครบถึง `0012_cash_bills.sql`
 4. รัน `supabase/seed.sql` เพื่อสร้างข้อมูลทดสอบ
 5. ใน Supabase Auth settings ให้เปิด Email provider
 
@@ -98,7 +100,7 @@ where email = 'your-email@example.com';
 1. รับรถเข้าซ่อม: เพิ่มลูกค้า > เพิ่มรถ > เปิดงานซ่อม > พิมพ์ใบรับรถ
 2. เสนอราคา: เลือกงานซ่อม > เพิ่มค่าแรง/อะไหล่ > ออกใบเสนอราคา > อนุมัติ
 3. ซ่อมและตัดสต๊อก: สร้างใบแจ้งหนี้ที่มี item ประเภทอะไหล่ ระบบตรวจสต๊อกและตัด stock movement
-4. วางบิลและรับเงิน: Convert ใบเสนอราคาเป็นใบแจ้งหนี้ > ออกใบเสร็จ > บันทึกรายรับอัตโนมัติ
+4. วางบิลและรับเงิน: Convert ใบเสนอราคาเป็นใบแจ้งหนี้ > ออกใบเสร็จ > บันทึกรายรับอัตโนมัติ หรือออกบิลเงินสดสำหรับงานด่วนพร้อมบันทึกรายรับทันที
 5. รายจ่ายและกำไรขาดทุน: บันทึกรายจ่าย > ดูรายงานรายรับ รายจ่าย กำไรขาดทุน ลูกหนี้ และสต๊อก
 6. ซื้ออะไหล่และเจ้าหนี้: เลือก Supplier > เพิ่มรายการอะไหล่ > บันทึกใบซื้อ > สต๊อกเพิ่มอัตโนมัติ > จ่ายชำระบางส่วน/ครบจำนวน
 7. ขออนุมัติลบเอกสารสำคัญ: กดลบเอกสาร > ระบุเหตุผล > Owner ตรวจในหน้าอนุมัติ > ระบบ soft delete และบันทึก Activity Log
@@ -148,7 +150,7 @@ The smoke test is read-only. It loads `.env.local` automatically and connects wi
 
 ใช้ `npm run db:verify:notifications` เพื่อเรียก `refresh_system_notifications()` กับผู้ใช้ active จริง ตรวจว่ามีแจ้งเตือนจากอะไหล่ใกล้หมด/หมดสต๊อก ใบแจ้งหนี้ใกล้ครบกำหนด/เกินกำหนด และงานซ่อมที่รออะไหล่หรือรอชำระเงินนาน พร้อมตรวจว่าแจ้งเตือนลิงก์ตรงไปยัง record ต้นทาง
 
-It checks Auth/RBAC, settings, document counters, customers, vehicles, repair jobs, quotations, invoices, receipts, payments, stock movements, purchases, approval requests, income/expense records, unique document numbers, and activity logs. `FAIL` exits with code `1`; `WARN` exits successfully but tells you which business flow should be completed in the seeded/staging data.
+It checks Auth/RBAC, settings, document counters, customers, vehicles, repair jobs, quotations, invoices, receipts, cash bills, payments, stock movements, purchases, approval requests, income/expense records, unique document numbers, and activity logs. `FAIL` exits with code `1`; `WARN` exits successfully but tells you which business flow should be completed in the seeded/staging data.
 
 ## Security
 
@@ -167,7 +169,7 @@ It checks Auth/RBAC, settings, document counters, customers, vehicles, repair jo
 ## ไฟล์สำคัญ
 
 - `supabase/migrations`: schema, FK, index, trigger, RLS policy, document counter, storage policy, purchase workflow RPC, approval workflow, document void/reversal metadata, void/reversal transaction RPC และ real-data notification refresh RPC
-- `supabase/seed.sql`: seed admin, ลูกค้า, รถ, อะไหล่, supplier, งานซ่อม, ใบซื้อ, เอกสาร, รายรับรายจ่าย
+- `supabase/seed.sql`: seed admin, ลูกค้า, รถ, อะไหล่, supplier, งานซ่อม, ใบซื้อ, เอกสาร, บิลเงินสด, บัญชีรับเงิน, รายรับรายจ่าย
 - `supabase/seed_smoke.sql`: seed ซ่อมชุดข้อมูล active สำหรับรัน `npm run smoke:e2e` ใน staging/local
 - `supabase/verify_void_rpc.sql`: ตรวจ RPC void/reversal transaction แบบ rollback
 - `supabase/verify_notifications.sql`: ตรวจ RPC แจ้งเตือนจากข้อมูลจริงและ deep-link ไปยัง record ต้นทาง

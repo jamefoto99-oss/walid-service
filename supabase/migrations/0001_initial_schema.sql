@@ -41,6 +41,11 @@ create table public.company_settings (
   invoice_prefix text not null default 'INV',
   receipt_prefix text not null default 'RC',
   repair_job_prefix text not null default 'JOB',
+  cash_bill_prefix text not null default 'CB',
+  bank_name text,
+  bank_logo_url text,
+  bank_account_number text,
+  bank_account_name text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   deleted_at timestamptz
@@ -53,7 +58,7 @@ create table public.document_counters (
 );
 
 insert into public.document_counters(prefix, running_number) values
-  ('JOB', 0), ('QT', 0), ('INV', 0), ('RC', 0)
+  ('JOB', 0), ('QT', 0), ('INV', 0), ('RC', 0), ('CB', 0)
 on conflict (prefix) do nothing;
 
 create or replace function public.next_document_number(p_prefix text)
@@ -313,6 +318,43 @@ create table public.receipts (
   deleted_at timestamptz
 );
 
+create table public.cash_bills (
+  id uuid primary key default gen_random_uuid(),
+  cash_bill_no text not null unique,
+  issued_at date not null default current_date,
+  customer_id uuid references public.customers(id),
+  vehicle_id uuid references public.vehicles(id),
+  repair_job_id uuid references public.repair_jobs(id),
+  customer_name text,
+  customer_phone text,
+  customer_address text,
+  vehicle_text text,
+  subtotal numeric(12,2) not null default 0,
+  discount numeric(12,2) not null default 0,
+  total numeric(12,2) not null default 0,
+  payment_method text not null default 'cash' check (payment_method in ('cash','transfer','qr','other')),
+  notes text,
+  created_by uuid references public.profiles(id),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  deleted_at timestamptz
+);
+
+create table public.cash_bill_items (
+  id uuid primary key default gen_random_uuid(),
+  cash_bill_id uuid not null references public.cash_bills(id) on delete cascade,
+  item_type text not null check (item_type in ('labor','part','other')),
+  part_id uuid references public.parts(id),
+  description text not null,
+  quantity numeric(12,2) not null default 1,
+  unit text not null default 'ชิ้น',
+  unit_price numeric(12,2) not null default 0,
+  discount numeric(12,2) not null default 0,
+  total numeric(12,2) not null default 0,
+  sort_order integer not null default 1,
+  created_at timestamptz not null default now()
+);
+
 create table public.income_records (
   id uuid primary key default gen_random_uuid(),
   recorded_at date not null default current_date,
@@ -322,6 +364,7 @@ create table public.income_records (
   payment_method text not null check (payment_method in ('cash','transfer','qr','other')),
   reference_no text,
   receipt_id uuid references public.receipts(id),
+  cash_bill_id uuid references public.cash_bills(id),
   created_by uuid references public.profiles(id),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
@@ -409,7 +452,7 @@ declare
 begin
   foreach tbl in array array[
     'users','profiles','company_settings','customers','vehicles','repair_jobs','repair_job_items',
-    'part_categories','suppliers','parts','purchases','quotations','invoices','receipts',
+    'part_categories','suppliers','parts','purchases','quotations','invoices','receipts','cash_bills',
     'income_records','expense_records'
   ] loop
     execute format('drop trigger if exists touch_%I on public.%I', tbl, tbl);
@@ -424,6 +467,8 @@ create index repair_jobs_status_idx on public.repair_jobs (status);
 create index repair_jobs_customer_idx on public.repair_jobs (customer_id);
 create index parts_low_stock_idx on public.parts (quantity_on_hand, low_stock_threshold);
 create index invoices_status_idx on public.invoices (payment_status, due_at);
+create index cash_bills_issued_at_idx on public.cash_bills (issued_at);
+create index cash_bills_customer_idx on public.cash_bills (customer_id);
 create index income_date_idx on public.income_records (recorded_at);
 create index expense_date_idx on public.expense_records (recorded_at);
 create index activity_logs_record_idx on public.activity_logs (table_name, record_id);
@@ -478,6 +523,8 @@ alter table public.quotation_items enable row level security;
 alter table public.invoices enable row level security;
 alter table public.invoice_items enable row level security;
 alter table public.receipts enable row level security;
+alter table public.cash_bills enable row level security;
+alter table public.cash_bill_items enable row level security;
 alter table public.income_records enable row level security;
 alter table public.expense_records enable row level security;
 alter table public.payment_records enable row level security;
@@ -521,6 +568,8 @@ create policy quotation_items_finance on public.quotation_items for all to authe
 create policy invoices_finance on public.invoices for all to authenticated using (public.has_role(array['owner','manager','accountant'])) with check (public.has_role(array['owner','manager','accountant']));
 create policy invoice_items_finance on public.invoice_items for all to authenticated using (public.has_role(array['owner','manager','accountant'])) with check (public.has_role(array['owner','manager','accountant']));
 create policy receipts_finance on public.receipts for all to authenticated using (public.has_role(array['owner','manager','accountant'])) with check (public.has_role(array['owner','manager','accountant']));
+create policy cash_bills_finance on public.cash_bills for all to authenticated using (public.has_role(array['owner','manager','accountant'])) with check (public.has_role(array['owner','manager','accountant']));
+create policy cash_bill_items_finance on public.cash_bill_items for all to authenticated using (public.has_role(array['owner','manager','accountant'])) with check (public.has_role(array['owner','manager','accountant']));
 create policy income_finance on public.income_records for all to authenticated using (public.has_role(array['owner','manager','accountant'])) with check (public.has_role(array['owner','manager','accountant']));
 create policy expenses_finance on public.expense_records for all to authenticated using (public.has_role(array['owner','manager','accountant'])) with check (public.has_role(array['owner','manager','accountant']));
 create policy payments_finance on public.payment_records for all to authenticated using (public.has_role(array['owner','manager','accountant'])) with check (public.has_role(array['owner','manager','accountant']));

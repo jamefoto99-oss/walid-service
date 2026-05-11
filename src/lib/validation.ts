@@ -124,6 +124,12 @@ function applyCreateDefaults(moduleKey: string, payload: Partial<RecordInput>) {
     payload.invoice_prefix = textFallback(payload.invoice_prefix, "INV");
     payload.receipt_prefix = textFallback(payload.receipt_prefix, "RC");
     payload.repair_job_prefix = textFallback(payload.repair_job_prefix, "JOB");
+    payload.cash_bill_prefix = textFallback(payload.cash_bill_prefix, "CB");
+  }
+
+  if (moduleKey === "cash-bills") {
+    payload.payment_method = textFallback(payload.payment_method, "cash");
+    payload.customer_name = textFallback(payload.customer_name, "ลูกค้าเงินสด");
   }
 
   return payload;

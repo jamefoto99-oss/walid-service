@@ -26,6 +26,8 @@ const TABLES = [
   "invoices",
   "invoice_items",
   "receipts",
+  "cash_bills",
+  "cash_bill_items",
   "income_records",
   "expense_records",
   "payment_records",
@@ -229,6 +231,8 @@ function buildChecks(data) {
   const invoices = rows.invoices ?? [];
   const invoiceItems = rows.invoice_items ?? [];
   const receipts = rows.receipts ?? [];
+  const cashBills = rows.cash_bills ?? [];
+  const cashBillItems = rows.cash_bill_items ?? [];
   const incomeRecords = rows.income_records ?? [];
   const expenseRecords = rows.expense_records ?? [];
   const paymentRecords = rows.payment_records ?? [];
@@ -236,6 +240,7 @@ function buildChecks(data) {
   const activityLogs = rows.activity_logs ?? [];
   const activeInvoices = invoices.filter((row) => !row.voided_at && String(row.payment_status ?? "") !== "cancelled");
   const activeReceipts = receipts.filter((row) => !row.voided_at);
+  const activeCashBills = cashBills.filter((row) => !row.deleted_at);
   const activeIncomeRecords = incomeRecords.filter((row) => !row.deleted_at && !row.voided_at);
   const activeExpenseRecords = expenseRecords.filter((row) => !row.deleted_at && !row.voided_at);
   const activePaymentRecords = paymentRecords.filter((row) => !row.voided_at);
@@ -253,13 +258,15 @@ function buildChecks(data) {
   const activePurchaseIds = byId(activePurchases);
   const activeInvoiceIds = byId(activeInvoices);
   const activeReceiptIds = byId(activeReceipts);
+  const activeCashBillIds = byId(activeCashBills);
   const activeQuotationItems = quotationItems.filter((row) => activeQuotationIds.has(String(row.quotation_id ?? "")));
   const activeInvoiceItems = invoiceItems.filter((row) => activeInvoiceIds.has(String(row.invoice_id ?? "")));
+  const activeCashBillItems = cashBillItems.filter((row) => activeCashBillIds.has(String(row.cash_bill_id ?? "")));
   const activePurchaseItems = purchaseItems.filter((row) => activePurchaseIds.has(String(row.purchase_id ?? "")));
 
   const requiredRoles = ["owner", "manager", "staff", "accountant"];
   const missingRoles = requiredRoles.filter((role) => !roleNames.has(role));
-  const requiredCounters = ["JOB", "QT", "INV", "RC", "PO"];
+  const requiredCounters = ["JOB", "QT", "INV", "RC", "PO", "CB"];
   const counterPrefixes = new Set(counters.map((row) => String(row.prefix ?? "")));
   const missingCounters = requiredCounters.filter((prefix) => !counterPrefixes.has(prefix));
 
@@ -350,7 +357,7 @@ function buildChecks(data) {
     (row) =>
       row.movement_type === "use" ||
       money(row.quantity) < 0 ||
-      ["invoice", "repair_job"].includes(String(row.reference_type ?? "")),
+      ["invoice", "repair_job", "cash_bill"].includes(String(row.reference_type ?? "")),
   );
 
   assertCheck(checks, parts.length > 0, "Flow 3", "parts exist", `${count(parts)} rows`);
@@ -383,6 +390,8 @@ function buildChecks(data) {
   assertCheck(checks, activeInvoices.length > 0, "Flow 4", "active invoices exist", `${count(activeInvoices)} rows`);
   assertCheck(checks, activeInvoiceItems.length > 0, "Flow 4", "active invoice items exist", `${count(activeInvoiceItems)} rows`);
   assertCheck(checks, activeReceipts.length > 0, "Flow 4", "active receipts exist", `${count(activeReceipts)} rows`);
+  assertCheck(checks, activeCashBills.length > 0, "Flow 4", "active cash bills exist", `${count(activeCashBills)} rows`);
+  assertCheck(checks, activeCashBillItems.length > 0, "Flow 4", "active cash bill items exist", `${count(activeCashBillItems)} rows`);
   assertCheck(checks, activePaymentRecords.length > 0, "Flow 4", "active payment records exist", `${count(activePaymentRecords)} rows`);
   assertCheck(checks, activeIncomeRecords.length > 0, "Flow 4", "active income records exist", `${count(activeIncomeRecords)} rows`);
   assertCheck(
@@ -405,6 +414,20 @@ function buildChecks(data) {
     "Flow 4",
     "receipt creates an income record",
     "receipt_id linkage",
+  );
+  assertCheck(
+    checks,
+    activeIncomeRecords.some((row) => row.cash_bill_id && activeCashBillIds.has(String(row.cash_bill_id))),
+    "Flow 4",
+    "cash bill creates an income record",
+    "cash_bill_id linkage",
+  );
+  assertCheck(
+    checks,
+    missingParentRows(activeCashBillItems, "cash_bill_id", activeCashBillIds).length === 0,
+    "Flow 4",
+    "cash bill items reference existing cash bills",
+    `${count(missingParentRows(activeCashBillItems, "cash_bill_id", activeCashBillIds))} orphan rows`,
   );
 
   const inconsistentInvoices = activeInvoices.filter((invoice) => {
@@ -485,6 +508,7 @@ function buildChecks(data) {
     ["Documents", quotations, "quotation_no"],
     ["Documents", invoices, "invoice_no"],
     ["Documents", receipts, "receipt_no"],
+    ["Documents", cashBills, "cash_bill_no"],
     ["Documents", purchases, "purchase_no"],
   ]) {
     const duplicates = duplicateValues(tableRows, field);
@@ -545,10 +569,12 @@ function buildChecks(data) {
   );
   assertCheck(
     checks,
-    activityLogs.some((row) => ["create_purchase", "create_receipt", "receive_invoice_payment", "seed"].includes(String(row.action ?? ""))),
+    activityLogs.some((row) =>
+      ["create_purchase", "create_receipt", "create_cash_bill", "receive_invoice_payment", "seed"].includes(String(row.action ?? "")),
+    ),
     "Audit",
     "important workflow activity is logged",
-    "expected create_purchase, create_receipt, receive_invoice_payment, or seed",
+    "expected create_purchase, create_receipt, create_cash_bill, receive_invoice_payment, or seed",
     "WARN",
   );
 

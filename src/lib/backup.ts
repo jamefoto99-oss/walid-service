@@ -26,6 +26,8 @@ export const backupDatasets = [
   { key: "invoices", table: "invoices", label: "ใบแจ้งหนี้", category: "documents" },
   { key: "invoice_items", table: "invoice_items", label: "รายการใบแจ้งหนี้", category: "documents" },
   { key: "receipts", table: "receipts", label: "ใบเสร็จรับเงิน", category: "documents" },
+  { key: "cash_bills", table: "cash_bills", label: "บิลเงินสด", category: "documents" },
+  { key: "cash_bill_items", table: "cash_bill_items", label: "รายการบิลเงินสด", category: "documents" },
   { key: "income_records", table: "income_records", label: "รายรับ", category: "accounting" },
   { key: "expense_records", table: "expense_records", label: "รายจ่าย", category: "accounting" },
   { key: "payment_records", table: "payment_records", label: "ประวัติรับชำระเงิน", category: "accounting" },
@@ -151,6 +153,8 @@ export function buildFlowChecks(rowsByKey: BackupRowsByKey) {
   const invoices = rowsByKey.invoices ?? [];
   const invoiceItems = rowsByKey.invoice_items ?? [];
   const receipts = rowsByKey.receipts ?? [];
+  const cashBills = rowsByKey.cash_bills ?? [];
+  const cashBillItems = rowsByKey.cash_bill_items ?? [];
   const incomeRecords = rowsByKey.income_records ?? [];
   const purchases = rowsByKey.purchases ?? [];
   const purchaseItems = rowsByKey.purchase_items ?? [];
@@ -162,6 +166,9 @@ export function buildFlowChecks(rowsByKey: BackupRowsByKey) {
   const receiptIncome = receipts.some((receipt) =>
     incomeRecords.some((income) => String(income.receipt_id ?? "") === String(receipt.id ?? "")),
   );
+  const cashBillIncome = cashBills.some((bill) =>
+    incomeRecords.some((income) => String(income.cash_bill_id ?? "") === String(bill.id ?? "")),
+  );
   const purchaseExpense = expenses.some(
     (expense) =>
       String(expense.category ?? "") === "parts_purchase" &&
@@ -170,7 +177,7 @@ export function buildFlowChecks(rowsByKey: BackupRowsByKey) {
   const stockLinkedToRepair = stockMovements.some(
     (row) =>
       String(row.movement_type ?? "") === "use" ||
-      ["repair_job", "invoice"].includes(String(row.reference_type ?? "")),
+      ["repair_job", "invoice", "cash_bill"].includes(String(row.reference_type ?? "")),
   );
 
   return [
@@ -198,8 +205,17 @@ export function buildFlowChecks(rowsByKey: BackupRowsByKey) {
     {
       key: "billing",
       title: "Flow 4: วางบิลและรับเงิน",
-      status: flowStatus([invoices.length > 0, invoiceItems.length > 0, paidInvoice, receipts.length > 0, receiptIncome]),
-      evidence: `${invoices.length} ใบแจ้งหนี้, ${receipts.length} ใบเสร็จ, ${incomeRecords.length} รายรับ`,
+      status: flowStatus([
+        invoices.length > 0,
+        invoiceItems.length > 0,
+        paidInvoice,
+        receipts.length > 0,
+        receiptIncome,
+        cashBills.length > 0,
+        cashBillItems.length > 0,
+        cashBillIncome,
+      ]),
+      evidence: `${invoices.length} ใบแจ้งหนี้, ${receipts.length} ใบเสร็จ, ${cashBills.length} บิลเงินสด, ${incomeRecords.length} รายรับ`,
       href: "/invoices",
     },
     {

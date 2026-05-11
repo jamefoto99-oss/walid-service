@@ -1,6 +1,6 @@
 import { createSupabaseServerClient } from "./supabase/server";
 
-export type DocumentPrefix = "JOB" | "QT" | "INV" | "RC" | "PO";
+export type DocumentPrefix = "JOB" | "QT" | "INV" | "RC" | "PO" | "CB";
 
 export async function nextDocumentNumber(prefix: DocumentPrefix) {
   const supabase = await createSupabaseServerClient();
@@ -12,10 +12,11 @@ export async function nextDocumentNumber(prefix: DocumentPrefix) {
     INV: "invoice_prefix",
     RC: "receipt_prefix",
     PO: "purchase_prefix",
+    CB: "cash_bill_prefix",
   };
   const { data: settings } = await supabase
     .from("company_settings")
-    .select("repair_job_prefix,quotation_prefix,invoice_prefix,receipt_prefix,purchase_prefix")
+    .select("repair_job_prefix,quotation_prefix,invoice_prefix,receipt_prefix,purchase_prefix,cash_bill_prefix")
     .is("deleted_at", null)
     .limit(1)
     .maybeSingle();
@@ -32,5 +33,6 @@ export function documentNoField(table: string) {
   if (table === "invoices") return "invoice_no";
   if (table === "receipts") return "receipt_no";
   if (table === "purchases") return "purchase_no";
+  if (table === "cash_bills") return "cash_bill_no";
   return null;
 }

@@ -33,11 +33,16 @@ const settingsFormSchema = z.object({
   phone: z.string().trim().optional().nullable(),
   line_id: z.string().trim().optional().nullable(),
   document_footer: z.string().trim().optional().nullable(),
+  bank_name: z.string().trim().optional().nullable(),
+  bank_logo_url: z.string().trim().optional().nullable(),
+  bank_account_number: z.string().trim().optional().nullable(),
+  bank_account_name: z.string().trim().optional().nullable(),
   repair_job_prefix: z.string().trim().min(1).max(12),
   quotation_prefix: z.string().trim().min(1).max(12),
   invoice_prefix: z.string().trim().min(1).max(12),
   receipt_prefix: z.string().trim().min(1).max(12),
   purchase_prefix: z.string().trim().min(1).max(12),
+  cash_bill_prefix: z.string().trim().min(1).max(12),
 });
 
 type SettingsFormInput = z.input<typeof settingsFormSchema>;
@@ -49,6 +54,7 @@ const defaultCounters: CounterRow[] = [
   { prefix: "INV", running_number: 0 },
   { prefix: "RC", running_number: 0 },
   { prefix: "PO", running_number: 0 },
+  { prefix: "CB", running_number: 0 },
 ];
 
 function fieldValue(settings: Row | null, key: string, fallback = "") {
@@ -95,11 +101,16 @@ export function CompanySettingsForm({ settings, counters, logs }: CompanySetting
       phone: fieldValue(settings, "phone"),
       line_id: fieldValue(settings, "line_id"),
       document_footer: fieldValue(settings, "document_footer"),
+      bank_name: fieldValue(settings, "bank_name"),
+      bank_logo_url: fieldValue(settings, "bank_logo_url"),
+      bank_account_number: fieldValue(settings, "bank_account_number"),
+      bank_account_name: fieldValue(settings, "bank_account_name"),
       repair_job_prefix: fieldValue(settings, "repair_job_prefix", "JOB"),
       quotation_prefix: fieldValue(settings, "quotation_prefix", "QT"),
       invoice_prefix: fieldValue(settings, "invoice_prefix", "INV"),
       receipt_prefix: fieldValue(settings, "receipt_prefix", "RC"),
       purchase_prefix: fieldValue(settings, "purchase_prefix", "PO"),
+      cash_bill_prefix: fieldValue(settings, "cash_bill_prefix", "CB"),
     },
   });
 
@@ -231,13 +242,36 @@ export function CompanySettingsForm({ settings, counters, logs }: CompanySetting
         </section>
 
         <section className="rounded-lg border border-border bg-surface p-4 shadow-sm">
+          <h2 className="mb-4 font-semibold">บัญชีรับเงินบนเอกสาร</h2>
+          <div className="grid gap-4 md:grid-cols-2">
+            <label>
+              <span className="text-sm font-semibold">ชื่อธนาคาร</span>
+              <input className={inputClass()} placeholder="เช่น กสิกรไทย" {...form.register("bank_name")} />
+            </label>
+            <label>
+              <span className="text-sm font-semibold">โลโก้ธนาคาร URL</span>
+              <input className={inputClass()} placeholder="https://..." {...form.register("bank_logo_url")} />
+            </label>
+            <label>
+              <span className="text-sm font-semibold">เลขที่บัญชี</span>
+              <input className={inputClass("font-mono text-red-700")} {...form.register("bank_account_number")} />
+            </label>
+            <label>
+              <span className="text-sm font-semibold">ชื่อบัญชี</span>
+              <input className={inputClass("font-semibold")} {...form.register("bank_account_name")} />
+            </label>
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-border bg-surface p-4 shadow-sm">
           <h2 className="mb-4 font-semibold">Prefix เอกสาร</h2>
-          <div className="grid gap-4 md:grid-cols-5">
+          <div className="grid gap-4 md:grid-cols-6">
             <PrefixField label="งานซ่อม" name="repair_job_prefix" form={form} />
             <PrefixField label="เสนอราคา" name="quotation_prefix" form={form} />
             <PrefixField label="แจ้งหนี้" name="invoice_prefix" form={form} />
             <PrefixField label="ใบเสร็จ" name="receipt_prefix" form={form} />
             <PrefixField label="ใบซื้อ" name="purchase_prefix" form={form} />
+            <PrefixField label="บิลเงินสด" name="cash_bill_prefix" form={form} />
           </div>
         </section>
 
@@ -274,10 +308,33 @@ export function CompanySettingsForm({ settings, counters, logs }: CompanySetting
                 </div>
               </div>
               <div className="text-right">
-                <p className="font-semibold">ใบแจ้งหนี้</p>
-                <p className="font-mono text-sm">{nextDocumentPreview(watched.invoice_prefix || "INV", counterRows)}</p>
+                <p className="font-semibold">บิลเงินสด</p>
+                <p className="font-mono text-sm">{nextDocumentPreview(watched.cash_bill_prefix || "CB", counterRows)}</p>
               </div>
             </div>
+            {watched.bank_name || watched.bank_account_number || watched.bank_account_name ? (
+              <div className="mt-4 grid gap-3 rounded-md border border-border bg-surface-soft p-3 text-sm sm:grid-cols-[auto_1fr]">
+                <div className="flex h-12 w-12 items-center justify-center rounded-md border border-border bg-white">
+                  {watched.bank_logo_url ? (
+                    <Image
+                      src={String(watched.bank_logo_url)}
+                      alt="โลโก้ธนาคาร"
+                      width={40}
+                      height={40}
+                      className="h-10 w-10 object-contain"
+                      unoptimized
+                    />
+                  ) : (
+                    <span className="text-xs font-bold text-muted">BANK</span>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  <p><span className="font-semibold">ธนาคาร :</span> {watched.bank_name || "-"}</p>
+                  <p><span className="font-semibold">เลขที่บัญชี :</span> <span className="text-lg font-black text-red-700">{watched.bank_account_number || "-"}</span></p>
+                  <p><span className="font-semibold">ชื่อบัญชี :</span> <span className="rounded bg-yellow-100 px-2 py-1 font-bold text-foreground">{watched.bank_account_name || "-"}</span></p>
+                </div>
+              </div>
+            ) : null}
             <p className="mt-4 min-h-12 whitespace-pre-wrap text-sm text-muted">
               {watched.document_footer || "ขอบคุณที่ใช้บริการ"}
             </p>
