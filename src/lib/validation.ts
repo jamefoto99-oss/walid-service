@@ -82,8 +82,8 @@ function codeFallback(prefix: string) {
 
 function applyCreateDefaults(moduleKey: string, payload: Partial<RecordInput>) {
   if (moduleKey === "customers") {
-    payload.full_name = textFallback(payload.full_name, "ไม่ระบุชื่อ");
-    payload.phone = textFallback(payload.phone, "-");
+    payload.full_name = String(payload.full_name ?? "").trim();
+    payload.phone = String(payload.phone ?? "").trim();
   }
 
   if (moduleKey === "vehicles") {

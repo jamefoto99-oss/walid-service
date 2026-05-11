@@ -231,41 +231,16 @@ function revalidateImportedModule(moduleKey: CsvImportModuleKey) {
 }
 
 async function importCustomers(supabase: SupabaseClient, profile: Profile, rows: CsvRow[], fileName: string) {
-  const errors: string[] = [];
   const records = rows.map((row) => {
-    const fullName = requireValue(cell(row, aliases.fullName), row.line, "ชื่อลูกค้า", errors);
-    const phone = requireValue(cell(row, aliases.phone), row.line, "เบอร์โทร", errors);
-
     return {
-      full_name: fullName,
-      phone,
+      full_name: cell(row, aliases.fullName),
+      phone: cell(row, aliases.phone),
       address: optionalText(cell(row, aliases.address)),
       line_id: optionalText(cell(row, aliases.lineId)),
       notes: optionalText(cell(row, aliases.notes)),
       created_by: profile.id,
     };
   });
-
-  findDuplicates(records.map((record) => record.phone)).forEach((phone) => {
-    errors.push(`เบอร์โทรซ้ำในไฟล์: ${phone}`);
-  });
-
-  const phones = [...new Set(records.map((record) => record.phone).filter(Boolean))];
-  if (phones.length) {
-    const { data, error } = await supabase
-      .from("customers")
-      .select("phone,full_name")
-      .in("phone", phones)
-      .is("deleted_at", null);
-
-    if (error) return { ok: false, error: error.message };
-    (data ?? []).forEach((customer) => {
-      errors.push(`พบลูกค้าเดิมในระบบ: ${customer.phone} (${customer.full_name ?? "-"})`);
-    });
-  }
-
-  const errorText = collectErrors(errors);
-  if (errorText) return { ok: false, error: errorText };
 
   const { error } = await supabase.from("customers").insert(records);
   if (error) return { ok: false, error: error.message };

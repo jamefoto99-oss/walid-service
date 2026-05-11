@@ -42,7 +42,7 @@ const csvTemplates: Record<string, { filename: string; content: string; help: st
       "full_name,phone,address,line_id,notes",
       "สมชาย ใจดี,0812345678,99/1 ขอนแก่น,@somchai,ลูกค้าประจำ",
     ].join("\n"),
-    help: "ต้องมี full_name และ phone ระบบจะไม่นำเข้าเบอร์ที่ซ้ำกับลูกค้าเดิม",
+    help: "full_name และ phone เว้นว่างได้ และข้อมูลลูกค้าซ้ำกันได้ตามข้อมูลในไฟล์",
   },
   vehicles: {
     filename: "vehicles-template.csv",
