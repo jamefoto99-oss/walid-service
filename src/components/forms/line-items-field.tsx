@@ -4,6 +4,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { unitOptions } from "@/lib/constants";
 import type { FieldOption, LineItemInput } from "@/lib/types";
 import { formatCurrency, toNumber } from "@/lib/utils";
+import { SearchableSelect } from "./searchable-select";
 import { Button } from "../ui/button";
 
 const blankItem: LineItemInput = {
@@ -87,18 +88,16 @@ export function LineItemsField({
               onChange={(event) => update(index, { description: event.target.value })}
             />
             {item.item_type === "part" ? (
-              <select
-                className="h-10 rounded-md border border-border bg-white px-3 text-sm md:col-span-2"
-                value={item.part_id ?? ""}
-                onChange={(event) => selectPart(index, event.target.value, event.target.selectedOptions[0]?.text)}
-              >
-                <option value="">เลือกอะไหล่</option>
-                {partOptions.map((part) => (
-                  <option key={part.value} value={part.value}>
-                    {part.label}
-                  </option>
-                ))}
-              </select>
+              <div className="md:col-span-2">
+                <SearchableSelect
+                  className="h-10 rounded-md border border-border bg-white px-3 py-2 text-sm outline-none focus:border-primary"
+                  emptyText="ไม่พบอะไหล่"
+                  onValueChange={(partId, option) => selectPart(index, partId, option?.label)}
+                  options={partOptions}
+                  placeholder="ค้นหาอะไหล่"
+                  value={item.part_id ?? ""}
+                />
+              </div>
             ) : (
               <div className="hidden md:col-span-2 md:block" />
             )}

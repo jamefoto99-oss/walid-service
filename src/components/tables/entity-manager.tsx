@@ -12,7 +12,7 @@ import {
 import { Download, Edit3, Eye, FileDown, FileText, FileUp, Plus, Search, ShieldAlert, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useActionState, useEffect, useMemo, useState, useTransition, type FormEvent } from "react";
-import { useForm } from "react-hook-form";
+import { useController, useForm, type Control } from "react-hook-form";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createRecord, deleteRecord, updateRecord } from "@/app/actions/crud";
@@ -24,6 +24,7 @@ import { cn, formatCurrency, formatDate } from "@/lib/utils";
 import { Badge } from "../ui/badge";
 import { Button, ButtonLink } from "../ui/button";
 import { LineItemsField } from "../forms/line-items-field";
+import { SearchableSelect } from "../forms/searchable-select";
 
 type EntityManagerProps = {
   config: ModuleConfig;
@@ -90,10 +91,12 @@ function defaultValue(field: FieldConfig, row?: Record<string, unknown>, initial
 
 function FieldControl({
   field,
+  control,
   register,
   references,
 }: {
   field: FieldConfig;
+  control: Control<Record<string, unknown>>;
   register: ReturnType<typeof useForm<Record<string, unknown>>>["register"];
   references: ReferenceData;
 }) {
@@ -106,16 +109,7 @@ function FieldControl({
 
   if (field.type === "select") {
     const options = field.optionsKey ? references[field.optionsKey] : field.options ?? [];
-    return (
-      <select className={baseClass} {...register(field.name)}>
-        <option value="">เลือกข้อมูล</option>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    );
+    return <SearchableFieldControl baseClass={baseClass} control={control} fieldName={field.name} options={options} />;
   }
 
   return (
@@ -139,6 +133,32 @@ function FieldControl({
         </datalist>
       ) : null}
     </>
+  );
+}
+
+function SearchableFieldControl({
+  baseClass,
+  control,
+  fieldName,
+  options,
+}: {
+  baseClass: string;
+  control: Control<Record<string, unknown>>;
+  fieldName: string;
+  options: FieldConfig["options"];
+}) {
+  const { field } = useController({ control, name: fieldName });
+  return (
+    <SearchableSelect
+      className={baseClass.replace("mt-1 ", "")}
+      containerClassName="mt-1"
+      emptyText="ไม่พบข้อมูล"
+      onBlur={field.onBlur}
+      onValueChange={(value) => field.onChange(value)}
+      options={options ?? []}
+      placeholder="พิมพ์ค้นหาแล้วเลือก"
+      value={String(field.value ?? "")}
+    />
   );
 }
 
@@ -391,7 +411,7 @@ function EntityFormDialog({
                 <span className="text-sm font-semibold">
                   {field.label}
                 </span>
-                <FieldControl field={field} register={form.register} references={references} />
+                <FieldControl control={form.control} field={field} register={form.register} references={references} />
                 {form.formState.errors[field.name] ? (
                   <p className="mt-1 text-sm text-danger">{String(form.formState.errors[field.name]?.message)}</p>
                 ) : null}
