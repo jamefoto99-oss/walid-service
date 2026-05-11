@@ -1,7 +1,7 @@
 insert into public.company_settings (
   company_name, address, phone, line_id, document_footer,
   quotation_prefix, invoice_prefix, receipt_prefix, repair_job_prefix,
-  cash_bill_prefix, bank_name, bank_logo_url, bank_account_number, bank_account_name
+  cash_bill_prefix, billing_statement_prefix, bank_name, bank_logo_url, bank_account_number, bank_account_name
 ) values (
   'อู่วาลิดการช่าง',
   '99/9 หมู่ 4 ตำบลในเมือง อำเภอเมือง จังหวัดขอนแก่น 40000',
@@ -9,11 +9,12 @@ insert into public.company_settings (
   '@walidgarage',
   'ขอบคุณที่ไว้วางใจอู่วาลิดการช่าง',
   'QT', 'INV', 'RC', 'JOB',
-  'CB', 'ธนาคารกสิกรไทย', null, '123-4-56789-0', 'อู่วาลิดการช่าง'
+  'CB', 'BL', 'ธนาคารกสิกรไทย', null, '123-4-56789-0', 'อู่วาลิดการช่าง'
 ) on conflict do nothing;
 
 update public.company_settings
 set cash_bill_prefix = coalesce(nullif(cash_bill_prefix, ''), 'CB'),
+    billing_statement_prefix = coalesce(nullif(billing_statement_prefix, ''), 'BL'),
     bank_name = coalesce(bank_name, 'ธนาคารกสิกรไทย'),
     bank_account_number = coalesce(bank_account_number, '123-4-56789-0'),
     bank_account_name = coalesce(bank_account_name, 'อู่วาลิดการช่าง'),
@@ -283,10 +284,11 @@ begin
     (admin_id, 'request_delete_approval', 'quotations', quote1, jsonb_build_object('approval_id', approval1));
 
   insert into public.document_counters(prefix, running_number)
-  values ('PO', 1), ('CB', 1)
+  values ('PO', 1), ('CB', 1), ('BL', 0)
   on conflict (prefix) do update set running_number = greatest(public.document_counters.running_number, 1);
 
   update public.document_counters set running_number = 1 where prefix in ('JOB','QT','INV','RC','CB');
+  update public.document_counters set running_number = greatest(running_number, 0) where prefix = 'BL';
 end $$;
 
 do $$
@@ -355,6 +357,6 @@ begin
   end if;
 
   insert into public.document_counters(prefix, running_number)
-  values ('CB', 1)
+  values ('CB', 1), ('BL', 0)
   on conflict (prefix) do update set running_number = greatest(public.document_counters.running_number, 1);
 end $$;

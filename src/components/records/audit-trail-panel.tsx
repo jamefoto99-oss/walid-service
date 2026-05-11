@@ -15,6 +15,7 @@ const actionLabels: Record<string, string> = {
   approve_delete_approval: "อนุมัติคำขอลบข้อมูล",
   convert_quotation_to_invoice: "แปลงใบเสนอราคาเป็นใบแจ้งหนี้",
   create: "สร้างข้อมูล",
+  create_billing_statement: "สร้างใบวางบิล",
   create_cash_bill: "ออกบิลเงินสด",
   create_purchase: "สร้างใบซื้อและรับสต๊อก",
   create_receipt: "ออกใบเสร็จรับเงิน",
@@ -35,6 +36,7 @@ const actionLabels: Record<string, string> = {
 };
 
 const tableLabels: Record<string, string> = {
+  billing_statements: "ใบวางบิล",
   cash_bills: "บิลเงินสด",
   company_settings: "ตั้งค่ากิจการ",
   invoices: "ใบแจ้งหนี้",

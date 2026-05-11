@@ -44,6 +44,7 @@ export type ModuleKey =
   | "quotations"
   | "invoices"
   | "receipts"
+  | "billing-statements"
   | "cash-bills"
   | "income"
   | "expenses"
@@ -60,6 +61,7 @@ export type TableName =
   | "quotations"
   | "invoices"
   | "receipts"
+  | "billing_statements"
   | "cash_bills"
   | "income_records"
   | "expense_records"
@@ -84,7 +86,7 @@ export type ModuleConfig = {
   description: string;
   createLabel: string;
   allowCreate?: boolean;
-  numberPrefix?: "JOB" | "QT" | "INV" | "RC" | "PO" | "CB";
+  numberPrefix?: "JOB" | "QT" | "INV" | "RC" | "PO" | "CB" | "BS";
   policy: RolePolicy;
   searchFields: string[];
   columns: { key: string; label: string; type?: "money" | "date" | "badge" }[];

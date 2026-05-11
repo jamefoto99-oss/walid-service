@@ -1,13 +1,14 @@
 "use client";
 
 import { ButtonLink } from "@/components/ui/button";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { cn, formatCurrency, formatDate } from "@/lib/utils";
 
 const labels: Record<string, string> = {
   "repair-job": "ใบรับรถ",
   quotations: "ใบเสนอราคา",
   invoices: "ใบแจ้งหนี้",
   receipts: "ใบเสร็จรับเงิน",
+  "billing-statements": "ใบวางบิล",
   "cash-bills": "บิลเงินสด",
 };
 
@@ -16,12 +17,18 @@ function documentNumber(type: string, document: Record<string, unknown>) {
   if (type === "quotations") return document.quotation_no;
   if (type === "invoices") return document.invoice_no;
   if (type === "receipts") return document.receipt_no;
+  if (type === "billing-statements") return document.billing_statement_no;
   if (type === "cash-bills") return document.cash_bill_no;
   return document.id;
 }
 
 function hasPaymentInfo(company: Record<string, unknown> | null) {
   return Boolean(company?.bank_name || company?.bank_account_number || company?.bank_account_name);
+}
+
+function displayValue(value: unknown) {
+  const text = String(value ?? "").trim();
+  return text && text !== "-" ? text : "";
 }
 
 function isCancelledDocument(document: Record<string, unknown>) {
@@ -47,6 +54,21 @@ export function DocumentPrint({
   const { type, document, company, customer, vehicle, items } = data;
   const title = labels[type] ?? "เอกสาร";
   const cancelled = isCancelledDocument(document);
+  const companyName = displayValue(company?.company_name) || "อู่วาลิดการช่าง";
+  const companyAddress = displayValue(company?.address);
+  const companyContact = [
+    displayValue(company?.phone) ? `โทร ${displayValue(company?.phone)}` : "",
+    displayValue(company?.line_id) ? `LINE ${displayValue(company?.line_id)}` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const customerPhone = displayValue(customer?.phone);
+  const customerAddress = displayValue(customer?.address);
+  const vehicleIdentity = [displayValue(vehicle?.license_plate), displayValue(vehicle?.province)].filter(Boolean).join(" ");
+  const vehicleDetail = [displayValue(vehicle?.brand), displayValue(vehicle?.model), displayValue(vehicle?.color)].filter(Boolean).join(" ");
+  const mileage = displayValue(document.intake_mileage ?? vehicle?.mileage);
+  const hasVehicleInfo = Boolean(vehicleIdentity || vehicleDetail || mileage);
+  const noteText = displayValue(document.notes);
 
   return (
     <main className="min-h-screen bg-background p-4 print:bg-white">
@@ -70,12 +92,12 @@ export function DocumentPrint({
           <div className="flex items-start gap-4">
             {company?.logo_url ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img alt="โลโก้กิจการ" className="h-20 w-20 object-contain" src={String(company.logo_url)} />
+              <img alt="โลโก้กิจการ" className="h-14 w-14 object-contain" src={String(company.logo_url)} />
             ) : null}
             <div>
-              <p className="text-2xl font-bold">{String(company?.company_name ?? "อู่วาลิดการช่าง")}</p>
-              <p className="mt-2 max-w-lg text-sm text-zinc-600">{String(company?.address ?? "-")}</p>
-              <p className="text-sm text-zinc-600">โทร {String(company?.phone ?? "-")} LINE {String(company?.line_id ?? "-")}</p>
+              <p className="text-2xl font-bold leading-tight">{companyName}</p>
+              {companyAddress ? <p className="mt-1 max-w-lg text-sm text-zinc-600">{companyAddress}</p> : null}
+              {companyContact ? <p className="text-sm text-zinc-600">{companyContact}</p> : null}
             </div>
           </div>
           <div className="text-right">
@@ -102,21 +124,21 @@ export function DocumentPrint({
           </section>
         ) : null}
 
-        <section className="grid gap-6 border-b border-zinc-300 py-6 md:grid-cols-2">
+        <section className={cn("grid gap-6 border-b border-zinc-300 py-6", hasVehicleInfo && "md:grid-cols-2")}>
           <div>
             <h2 className="font-semibold">ข้อมูลลูกค้า</h2>
-            <p className="mt-2">{String(customer?.full_name ?? "-")}</p>
-            <p className="text-sm text-zinc-600">โทร {String(customer?.phone ?? "-")}</p>
-            <p className="text-sm text-zinc-600">{String(customer?.address ?? "")}</p>
+            <p className="mt-2">{displayValue(customer?.full_name) || "-"}</p>
+            {customerPhone ? <p className="text-sm text-zinc-600">โทร {customerPhone}</p> : null}
+            {customerAddress ? <p className="text-sm text-zinc-600">{customerAddress}</p> : null}
           </div>
-          <div>
-            <h2 className="font-semibold">ข้อมูลรถ</h2>
-            <p className="mt-2">{String(vehicle?.license_plate ?? "-")} {String(vehicle?.province ?? "")}</p>
-            <p className="text-sm text-zinc-600">
-              {String(vehicle?.brand ?? "")} {String(vehicle?.model ?? "")} {String(vehicle?.color ?? "")}
-            </p>
-            <p className="text-sm text-zinc-600">เลขไมล์ {String(document.intake_mileage ?? vehicle?.mileage ?? "-")}</p>
-          </div>
+          {hasVehicleInfo ? (
+            <div>
+              <h2 className="font-semibold">ข้อมูลรถ</h2>
+              {vehicleIdentity ? <p className="mt-2">{vehicleIdentity}</p> : null}
+              {vehicleDetail ? <p className="text-sm text-zinc-600">{vehicleDetail}</p> : null}
+              {mileage ? <p className="text-sm text-zinc-600">เลขไมล์ {mileage}</p> : null}
+            </div>
+          ) : null}
         </section>
 
         {type === "repair-job" ? (
@@ -132,6 +154,43 @@ export function DocumentPrint({
             <div>
               <h2 className="font-semibold">ของมีค่าในรถ</h2>
               <p className="mt-2 whitespace-pre-wrap text-sm">{String(document.valuables ?? "-")}</p>
+            </div>
+          </section>
+        ) : type === "billing-statements" ? (
+          <section className="border-b border-zinc-300 py-6">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-zinc-300 text-left">
+                  <th className="py-2">ใบแจ้งหนี้</th>
+                  <th className="py-2">วันที่ออก</th>
+                  <th className="py-2">ครบกำหนด</th>
+                  <th className="py-2 text-right">ยอดรวม</th>
+                  <th className="py-2 text-right">ชำระแล้ว</th>
+                  <th className="py-2 text-right">ยอดค้าง</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item) => (
+                  <tr className="border-b border-zinc-200" key={String(item.id)}>
+                    <td className="py-3 font-semibold">{String(item.invoice_no ?? "-")}</td>
+                    <td className="py-3">{formatDate(item.issued_at)}</td>
+                    <td className="py-3">{formatDate(item.due_at)}</td>
+                    <td className="py-3 text-right">{formatCurrency(item.total)}</td>
+                    <td className="py-3 text-right">{formatCurrency(item.paid_amount)}</td>
+                    <td className="py-3 text-right font-bold">{formatCurrency(item.balance_due)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="ml-auto mt-6 w-full max-w-sm space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span>ยอดรวมใบวางบิล</span>
+                <span>{formatCurrency(document.subtotal ?? document.total)}</span>
+              </div>
+              <div className="flex justify-between border-t border-zinc-300 pt-2 text-lg font-bold">
+                <span>ยอดสุทธิ</span>
+                <span>{formatCurrency(document.total)}</span>
+              </div>
             </div>
           </section>
         ) : (
@@ -206,12 +265,12 @@ export function DocumentPrint({
           </section>
         ) : null}
 
-        <section className="py-6">
-          <h2 className="font-semibold">หมายเหตุ</h2>
-          <p className="mt-2 min-h-12 whitespace-pre-wrap text-sm text-zinc-600">
-            {String(document.notes ?? company?.document_footer ?? "-")}
-          </p>
-        </section>
+        {noteText ? (
+          <section className="py-6">
+            <h2 className="font-semibold">หมายเหตุ</h2>
+            <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-600">{noteText}</p>
+          </section>
+        ) : null}
 
         <footer className="mt-12 grid gap-10 md:grid-cols-2">
           <div className="border-t border-zinc-400 pt-3 text-center text-sm">ผู้จ่ายเงิน</div>

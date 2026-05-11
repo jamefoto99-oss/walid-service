@@ -78,7 +78,12 @@ export async function getModuleRows(config: ModuleConfig) {
   const supabase = await createSupabaseServerClient();
   if (!supabase) return { setupRequired: true, rows: [] as Record<string, unknown>[] };
 
-  const selectColumns = config.key === "cash-bills" ? "*, cash_bill_items(*)" : "*";
+  const selectColumns =
+    config.key === "cash-bills"
+      ? "*, cash_bill_items(*)"
+      : config.key === "billing-statements"
+        ? "*, billing_statement_items(*)"
+        : "*";
   const query = supabase.from(config.table).select(selectColumns).order("created_at", { ascending: false });
   if (config.table !== "profiles") query.is("deleted_at", null);
 
@@ -89,6 +94,39 @@ export async function getModuleRows(config: ModuleConfig) {
   }
 
   return { setupRequired: false, rows: (data ?? []) as unknown as Record<string, unknown>[] };
+}
+
+export async function getBillingStatementsPageData() {
+  const supabase = await createSupabaseServerClient();
+  if (!supabase) {
+    return {
+      setupRequired: true,
+      invoices: [] as Record<string, unknown>[],
+      statements: [] as Record<string, unknown>[],
+    };
+  }
+
+  const [invoices, statements] = await Promise.all([
+    supabase
+      .from("invoices")
+      .select("id,invoice_no,issued_at,due_at,customer_id,total,paid_amount,balance_due,payment_status,customers(full_name,phone)")
+      .is("deleted_at", null)
+      .is("voided_at", null)
+      .neq("payment_status", "cancelled")
+      .gt("balance_due", 0)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("billing_statements")
+      .select("*, customers(full_name,phone), billing_statement_items(*)")
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  return {
+    setupRequired: false,
+    invoices: (invoices.data ?? []) as Record<string, unknown>[],
+    statements: (statements.data ?? []) as Record<string, unknown>[],
+  };
 }
 
 export async function getDashboardData(): Promise<DashboardData> {
@@ -987,7 +1025,7 @@ export async function getDocumentForPrint(type: string, id: string) {
   const customerId = (document as Record<string, unknown>).customer_id ?? invoiceSource?.customer_id;
   const vehicleId = (document as Record<string, unknown>).vehicle_id ?? invoiceSource?.vehicle_id;
   const invoiceId = type === "receipts" ? (document as Record<string, unknown>).invoice_id : id;
-  const [customer, vehicle, quotationItems, invoiceItems, cashBillItems] = await Promise.all([
+  const [customer, vehicle, quotationItems, invoiceItems, cashBillItems, billingStatementItems] = await Promise.all([
     customerId ? supabase.from("customers").select("*").eq("id", String(customerId)).maybeSingle() : Promise.resolve({ data: null }),
     vehicleId ? supabase.from("vehicles").select("*").eq("id", String(vehicleId)).maybeSingle() : Promise.resolve({ data: null }),
     type === "quotations"
@@ -998,6 +1036,9 @@ export async function getDocumentForPrint(type: string, id: string) {
       : Promise.resolve({ data: [] }),
     type === "cash-bills"
       ? supabase.from("cash_bill_items").select("*").eq("cash_bill_id", id).order("sort_order")
+      : Promise.resolve({ data: [] }),
+    type === "billing-statements"
+      ? supabase.from("billing_statement_items").select("*").eq("billing_statement_id", id).order("sort_order")
       : Promise.resolve({ data: [] }),
   ]);
   const manualCustomer: Record<string, unknown> | null =
@@ -1028,7 +1069,9 @@ export async function getDocumentForPrint(type: string, id: string) {
           ? invoiceItems.data ?? []
           : type === "cash-bills"
             ? cashBillItems.data ?? []
-            : [],
+            : type === "billing-statements"
+              ? billingStatementItems.data ?? []
+              : [],
   };
 }
 

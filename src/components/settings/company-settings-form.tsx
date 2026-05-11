@@ -43,6 +43,7 @@ const settingsFormSchema = z.object({
   receipt_prefix: z.string().trim().min(1).max(12),
   purchase_prefix: z.string().trim().min(1).max(12),
   cash_bill_prefix: z.string().trim().min(1).max(12),
+  billing_statement_prefix: z.string().trim().min(1).max(12),
 });
 
 type SettingsFormInput = z.input<typeof settingsFormSchema>;
@@ -55,6 +56,7 @@ const defaultCounters: CounterRow[] = [
   { prefix: "RC", running_number: 0 },
   { prefix: "PO", running_number: 0 },
   { prefix: "CB", running_number: 0 },
+  { prefix: "BL", running_number: 0 },
 ];
 
 function fieldValue(settings: Row | null, key: string, fallback = "") {
@@ -111,6 +113,7 @@ export function CompanySettingsForm({ settings, counters, logs }: CompanySetting
       receipt_prefix: fieldValue(settings, "receipt_prefix", "RC"),
       purchase_prefix: fieldValue(settings, "purchase_prefix", "PO"),
       cash_bill_prefix: fieldValue(settings, "cash_bill_prefix", "CB"),
+      billing_statement_prefix: fieldValue(settings, "billing_statement_prefix", "BL"),
     },
   });
 
@@ -265,13 +268,14 @@ export function CompanySettingsForm({ settings, counters, logs }: CompanySetting
 
         <section className="rounded-lg border border-border bg-surface p-4 shadow-sm">
           <h2 className="mb-4 font-semibold">Prefix เอกสาร</h2>
-          <div className="grid gap-4 md:grid-cols-6">
+          <div className="grid gap-4 md:grid-cols-4 xl:grid-cols-7">
             <PrefixField label="งานซ่อม" name="repair_job_prefix" form={form} />
             <PrefixField label="เสนอราคา" name="quotation_prefix" form={form} />
             <PrefixField label="แจ้งหนี้" name="invoice_prefix" form={form} />
             <PrefixField label="ใบเสร็จ" name="receipt_prefix" form={form} />
             <PrefixField label="ใบซื้อ" name="purchase_prefix" form={form} />
             <PrefixField label="บิลเงินสด" name="cash_bill_prefix" form={form} />
+            <PrefixField label="วางบิล" name="billing_statement_prefix" form={form} />
           </div>
         </section>
 

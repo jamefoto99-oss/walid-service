@@ -26,6 +26,8 @@ const TABLES = [
   "invoices",
   "invoice_items",
   "receipts",
+  "billing_statements",
+  "billing_statement_items",
   "cash_bills",
   "cash_bill_items",
   "income_records",
@@ -231,6 +233,8 @@ function buildChecks(data) {
   const invoices = rows.invoices ?? [];
   const invoiceItems = rows.invoice_items ?? [];
   const receipts = rows.receipts ?? [];
+  const billingStatements = rows.billing_statements ?? [];
+  const billingStatementItems = rows.billing_statement_items ?? [];
   const cashBills = rows.cash_bills ?? [];
   const cashBillItems = rows.cash_bill_items ?? [];
   const incomeRecords = rows.income_records ?? [];
@@ -240,6 +244,7 @@ function buildChecks(data) {
   const activityLogs = rows.activity_logs ?? [];
   const activeInvoices = invoices.filter((row) => !row.voided_at && String(row.payment_status ?? "") !== "cancelled");
   const activeReceipts = receipts.filter((row) => !row.voided_at);
+  const activeBillingStatements = billingStatements.filter((row) => !row.deleted_at && String(row.status ?? "") !== "cancelled");
   const activeCashBills = cashBills.filter((row) => !row.deleted_at);
   const activeIncomeRecords = incomeRecords.filter((row) => !row.deleted_at && !row.voided_at);
   const activeExpenseRecords = expenseRecords.filter((row) => !row.deleted_at && !row.voided_at);
@@ -258,15 +263,19 @@ function buildChecks(data) {
   const activePurchaseIds = byId(activePurchases);
   const activeInvoiceIds = byId(activeInvoices);
   const activeReceiptIds = byId(activeReceipts);
+  const activeBillingStatementIds = byId(activeBillingStatements);
   const activeCashBillIds = byId(activeCashBills);
   const activeQuotationItems = quotationItems.filter((row) => activeQuotationIds.has(String(row.quotation_id ?? "")));
   const activeInvoiceItems = invoiceItems.filter((row) => activeInvoiceIds.has(String(row.invoice_id ?? "")));
+  const activeBillingStatementItems = billingStatementItems.filter((row) =>
+    activeBillingStatementIds.has(String(row.billing_statement_id ?? "")),
+  );
   const activeCashBillItems = cashBillItems.filter((row) => activeCashBillIds.has(String(row.cash_bill_id ?? "")));
   const activePurchaseItems = purchaseItems.filter((row) => activePurchaseIds.has(String(row.purchase_id ?? "")));
 
   const requiredRoles = ["owner", "manager", "staff", "accountant"];
   const missingRoles = requiredRoles.filter((role) => !roleNames.has(role));
-  const requiredCounters = ["JOB", "QT", "INV", "RC", "PO", "CB"];
+  const requiredCounters = ["JOB", "QT", "INV", "RC", "PO", "CB", "BL"];
   const counterPrefixes = new Set(counters.map((row) => String(row.prefix ?? "")));
   const missingCounters = requiredCounters.filter((prefix) => !counterPrefixes.has(prefix));
 
@@ -429,6 +438,20 @@ function buildChecks(data) {
     "cash bill items reference existing cash bills",
     `${count(missingParentRows(activeCashBillItems, "cash_bill_id", activeCashBillIds))} orphan rows`,
   );
+  assertCheck(
+    checks,
+    missingParentRows(activeBillingStatementItems, "billing_statement_id", activeBillingStatementIds).length === 0,
+    "Flow 4",
+    "billing statement items reference existing billing statements",
+    `${count(missingParentRows(activeBillingStatementItems, "billing_statement_id", activeBillingStatementIds))} orphan rows`,
+  );
+  assertCheck(
+    checks,
+    missingParentRows(activeBillingStatementItems, "invoice_id", byId(invoices)).length === 0,
+    "Flow 4",
+    "billing statement items reference existing invoices",
+    `${count(missingParentRows(activeBillingStatementItems, "invoice_id", byId(invoices)))} orphan rows`,
+  );
 
   const inconsistentInvoices = activeInvoices.filter((invoice) => {
     const expectedBalance = Math.max(money(invoice.total) - money(invoice.paid_amount), 0);
@@ -508,6 +531,7 @@ function buildChecks(data) {
     ["Documents", quotations, "quotation_no"],
     ["Documents", invoices, "invoice_no"],
     ["Documents", receipts, "receipt_no"],
+    ["Documents", billingStatements, "billing_statement_no"],
     ["Documents", cashBills, "cash_bill_no"],
     ["Documents", purchases, "purchase_no"],
   ]) {

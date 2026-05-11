@@ -1,7 +1,7 @@
 import { createSupabaseServerClient } from "./supabase/server";
 import { getLatestCompanySettings } from "./company-settings";
 
-export type DocumentPrefix = "JOB" | "QT" | "INV" | "RC" | "PO" | "CB";
+export type DocumentPrefix = "JOB" | "QT" | "INV" | "RC" | "PO" | "CB" | "BS";
 
 export async function nextDocumentNumber(prefix: DocumentPrefix) {
   const supabase = await createSupabaseServerClient();
@@ -14,6 +14,7 @@ export async function nextDocumentNumber(prefix: DocumentPrefix) {
     RC: "receipt_prefix",
     PO: "purchase_prefix",
     CB: "cash_bill_prefix",
+    BS: "billing_statement_prefix",
   };
   const settings = await getLatestCompanySettings(supabase);
   const configuredPrefix = String(settings?.[prefixColumn[prefix]] ?? prefix);
@@ -30,5 +31,6 @@ export function documentNoField(table: string) {
   if (table === "receipts") return "receipt_no";
   if (table === "purchases") return "purchase_no";
   if (table === "cash_bills") return "cash_bill_no";
+  if (table === "billing_statements") return "billing_statement_no";
   return null;
 }

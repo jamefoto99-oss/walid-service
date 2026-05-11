@@ -12,6 +12,7 @@ const labels: Record<string, string> = {
   quotations: "ใบเสนอราคา",
   invoices: "ใบแจ้งหนี้",
   receipts: "ใบเสร็จรับเงิน",
+  "billing-statements": "ใบวางบิล",
   "cash-bills": "บิลเงินสด",
 };
 
@@ -41,6 +42,7 @@ function docNo(type: string, document: Record<string, unknown>) {
   if (type === "quotations") return document.quotation_no;
   if (type === "invoices") return document.invoice_no;
   if (type === "receipts") return document.receipt_no;
+  if (type === "billing-statements") return document.billing_statement_no;
   if (type === "cash-bills") return document.cash_bill_no;
   return document.id;
 }
@@ -55,6 +57,11 @@ function cancellationReason(document: Record<string, unknown>) {
 
 function hasPaymentInfo(company: Record<string, unknown> | null) {
   return Boolean(company?.bank_name || company?.bank_account_number || company?.bank_account_name);
+}
+
+function displayValue(value: unknown) {
+  const text = String(value ?? "").trim();
+  return text && text !== "-" ? text : "";
 }
 
 function fontRuns(value: unknown): Content {
@@ -125,13 +132,28 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
   const cancelled = isCancelledDocument(document);
   const logoDataUrl = await logoImageDataUrl(company?.logo_url);
   const bankLogoDataUrl = await logoImageDataUrl(company?.bank_logo_url);
-  const companyHeader: Content[] = [];
-  if (logoDataUrl) companyHeader.push({ image: logoDataUrl, width: 64, margin: [0, 0, 0, 8] });
-  companyHeader.push(
-    pdfText(company?.company_name ?? "อู่วาลิดการช่าง", { style: "company" }),
-    pdfText(company?.address ?? "-", { color: "#555555" }),
-    pdfText(`โทร ${String(company?.phone ?? "-")} LINE ${String(company?.line_id ?? "-")}`, { color: "#555555" }),
-  );
+  const companyName = displayValue(company?.company_name) || "อู่วาลิดการช่าง";
+  const companyAddress = displayValue(company?.address);
+  const companyContact = [
+    displayValue(company?.phone) ? `โทร ${displayValue(company?.phone)}` : "",
+    displayValue(company?.line_id) ? `LINE ${displayValue(company?.line_id)}` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const companyLines: Content[] = [
+    pdfText(companyName, { style: "company" }),
+    ...(companyAddress ? [pdfText(companyAddress, { color: "#555555" })] : []),
+    ...(companyContact ? [pdfText(companyContact, { color: "#555555" })] : []),
+  ];
+  const companyHeader: Content = logoDataUrl
+    ? {
+        columns: [
+          { image: logoDataUrl, width: 54, margin: [0, 0, 8, 0] },
+          { width: "*", stack: companyLines },
+        ],
+        columnGap: 8,
+      }
+    : { stack: companyLines };
   const detailContent: Content[] =
     type === "repair-job"
       ? [
@@ -142,6 +164,46 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
           { text: "ของมีค่าในรถ", bold: true, margin: [0, 10, 0, 4] },
           pdfText(document.valuables ?? "-"),
         ]
+      : type === "billing-statements"
+        ? [
+            {
+              table: {
+                widths: ["*", 64, 64, 72, 72, 72],
+                body: [
+                  ["ใบแจ้งหนี้", "วันที่ออก", "ครบกำหนด", "ยอดรวม", "ชำระแล้ว", "ยอดค้าง"],
+                  ...items.map((item) => [
+                    pdfText(item.invoice_no ?? "-"),
+                    pdfText(formatPdfDate(item.issued_at)),
+                    pdfText(formatPdfDate(item.due_at)),
+                    pdfText(formatPdfCurrency(item.total)),
+                    pdfText(formatPdfCurrency(item.paid_amount)),
+                    pdfText(formatPdfCurrency(item.balance_due), { bold: true }),
+                  ]),
+                ],
+              },
+              layout: "lightHorizontalLines",
+              margin: [0, 10, 0, 12],
+            },
+            {
+              columns: [
+                { text: "" },
+                {
+                  width: 220,
+                  table: {
+                    widths: ["*", 90],
+                    body: [
+                      ["ยอดรวมใบวางบิล", pdfText(formatPdfCurrency(document.subtotal ?? document.total))],
+                      [
+                        { text: "ยอดสุทธิ", bold: true },
+                        pdfText(formatPdfCurrency(document.total), { bold: true }),
+                      ],
+                    ],
+                  },
+                  layout: "noBorders",
+                },
+              ],
+            },
+          ]
       : [
           {
             table: {
@@ -276,6 +338,31 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
         ]
       : [];
 
+  const customerLines: Content[] = [
+    { text: "ข้อมูลลูกค้า", bold: true },
+    pdfText(displayValue(customer?.full_name) || "-"),
+    ...(displayValue(customer?.phone) ? [pdfText(`โทร ${displayValue(customer?.phone)}`)] : []),
+    ...(displayValue(customer?.address) ? [pdfText(customer?.address)] : []),
+  ];
+  const vehicleIdentity = [displayValue(vehicle?.license_plate), displayValue(vehicle?.province)].filter(Boolean).join(" ");
+  const vehicleDetail = [displayValue(vehicle?.brand), displayValue(vehicle?.model), displayValue(vehicle?.color)].filter(Boolean).join(" ");
+  const mileage = displayValue(document.intake_mileage ?? vehicle?.mileage);
+  const vehicleLines: Content[] = [
+    ...(vehicleIdentity ? [pdfText(vehicleIdentity)] : []),
+    ...(vehicleDetail ? [pdfText(vehicleDetail)] : []),
+    ...(mileage ? [pdfText(`เลขไมล์ ${mileage}`)] : []),
+  ];
+  const infoColumns: Content[] = vehicleLines.length
+    ? [{ stack: customerLines }, { stack: [{ text: "ข้อมูลรถ", bold: true }, ...vehicleLines] }]
+    : [{ stack: customerLines }];
+  const noteText = displayValue(document.notes);
+  const noteContent: Content[] = noteText
+    ? [
+        { text: "หมายเหตุ", bold: true, margin: [0, 18, 0, 4] },
+        pdfText(noteText),
+      ]
+    : [];
+
   const definition: TDocumentDefinitions = {
     pageSize: "A4",
     pageMargins: [36, 36, 36, 48],
@@ -298,25 +385,11 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
       ...cancellationContent,
       {
         margin: [0, 20, 0, 12],
-        columns: [
-          [
-            { text: "ข้อมูลลูกค้า", bold: true },
-            pdfText(customer?.full_name ?? "-"),
-            pdfText(`โทร ${String(customer?.phone ?? "-")}`),
-            pdfText(customer?.address ?? ""),
-          ],
-          [
-            { text: "ข้อมูลรถ", bold: true },
-            pdfText(`${String(vehicle?.license_plate ?? "-")} ${String(vehicle?.province ?? "")}`),
-            pdfText(`${String(vehicle?.brand ?? "")} ${String(vehicle?.model ?? "")} ${String(vehicle?.color ?? "")}`),
-            pdfText(`เลขไมล์ ${String(document.intake_mileage ?? vehicle?.mileage ?? "-")}`),
-          ],
-        ],
+        columns: infoColumns,
       },
       ...detailContent,
       ...paymentContent,
-      { text: "หมายเหตุ", bold: true, margin: [0, 18, 0, 4] },
-      pdfText(document.notes ?? company?.document_footer ?? "-"),
+      ...noteContent,
       {
         margin: [0, 70, 0, 0],
         columns: [

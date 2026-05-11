@@ -24,6 +24,7 @@ const settingsSchema = z.object({
   receipt_prefix: z.string().trim().min(1, "กรุณากรอก Prefix ใบเสร็จ").max(12),
   purchase_prefix: z.string().trim().min(1, "กรุณากรอก Prefix ใบซื้อ").max(12),
   cash_bill_prefix: z.string().trim().min(1, "กรุณากรอก Prefix บิลเงินสด").max(12),
+  billing_statement_prefix: z.string().trim().min(1, "กรุณากรอก Prefix ใบวางบิล").max(12),
 });
 
 const countersSchema = z.object({
@@ -70,6 +71,7 @@ export async function saveCompanySettings(input: unknown): Promise<ActionResult>
       receipt_prefix: normalizePrefix(payload.receipt_prefix),
       purchase_prefix: normalizePrefix(payload.purchase_prefix),
       cash_bill_prefix: normalizePrefix(payload.cash_bill_prefix),
+      billing_statement_prefix: normalizePrefix(payload.billing_statement_prefix),
     };
 
     const current = await getLatestCompanySettings(supabase);
@@ -88,6 +90,7 @@ export async function saveCompanySettings(input: unknown): Promise<ActionResult>
       normalized.receipt_prefix,
       normalized.purchase_prefix,
       normalized.cash_bill_prefix,
+      normalized.billing_statement_prefix,
     ];
 
     const { error: counterError } = await supabase.from("document_counters").upsert(

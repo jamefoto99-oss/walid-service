@@ -341,7 +341,7 @@ begin
     (admin_id, 'seed_smoke', 'purchases', purchase1, jsonb_build_object('note', 'ensured smoke purchase flow'));
 
   insert into public.document_counters(prefix, running_number)
-  values ('JOB', 1), ('QT', 1), ('INV', 1), ('RC', 1), ('PO', 1)
+  values ('JOB', 1), ('QT', 1), ('INV', 1), ('RC', 1), ('PO', 1), ('BL', 0)
   on conflict (prefix) do update
   set running_number = greatest(public.document_counters.running_number, excluded.running_number);
 end $$;

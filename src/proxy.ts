@@ -12,6 +12,7 @@ const protectedRoutes = [
   "/quotations",
   "/invoices",
   "/receipts",
+  "/billing-statements",
   "/cash-bills",
   "/income",
   "/expenses",
