@@ -4,6 +4,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/app/page-header";
 import { RepairJobDetailActions } from "@/components/repair-jobs/repair-job-detail-actions";
 import { RepairJobImageUploader } from "@/components/repair-jobs/repair-job-image-uploader";
+import { RepairJobItemsManager, type RepairJobItemRow } from "@/components/repair-jobs/repair-job-items-manager";
 import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import { SetupRequired } from "@/components/ui/setup-required";
@@ -147,49 +148,13 @@ export default async function RepairJobDetailPage({ params }: { params: Promise<
       </section>
 
       <section className="mb-5 grid gap-5 xl:grid-cols-[1.2fr_0.8fr]">
-        <div className="overflow-hidden rounded-lg border border-border bg-surface shadow-sm">
-          <div className="flex items-center justify-between border-b border-border p-4">
-            <div className="flex items-center gap-2">
-              <Wrench className="h-4 w-4 text-primary" />
-              <h2 className="font-semibold">รายการซ่อมในงาน</h2>
-            </div>
-            <p className="text-sm font-semibold text-primary">{formatCurrency(totalItems)}</p>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[680px] text-sm">
-              <thead className="bg-surface-soft text-left text-muted">
-                <tr>
-                  <th className="px-4 py-3">รายการ</th>
-                  <th className="px-4 py-3 text-right">ราคา/หน่วย</th>
-                  <th className="px-4 py-3 text-right">จำนวน</th>
-                  <th className="px-4 py-3 text-right">ส่วนลด</th>
-                  <th className="px-4 py-3 text-right">รวม</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item) => (
-                  <tr className="border-t border-border" key={text(item.id)}>
-                    <td className="px-4 py-3">
-                      <p className="font-semibold">{text(item.title)}</p>
-                      <p className="text-xs text-muted">{text(item.description)}</p>
-                    </td>
-                    <td className="px-4 py-3 text-right">{formatCurrency(item.labor_price)}</td>
-                    <td className="px-4 py-3 text-right">{text(item.quantity)}</td>
-                    <td className="px-4 py-3 text-right">{formatCurrency(item.discount)}</td>
-                    <td className="px-4 py-3 text-right font-semibold">{formatCurrency(item.total)}</td>
-                  </tr>
-                ))}
-                {!items.length ? (
-                  <tr>
-                    <td className="px-4 py-8 text-center text-muted" colSpan={5}>
-                      ยังไม่มีรายการซ่อมในงานนี้
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <RepairJobItemsManager
+          jobId={String(job.id)}
+          items={items as RepairJobItemRow[]}
+          parts={parts as never}
+          role={session.profile.role}
+          totalItems={totalItems}
+        />
 
         <div className="rounded-lg border border-border bg-surface p-4 shadow-sm">
           <div className="mb-3 flex items-center gap-2">

@@ -1149,7 +1149,7 @@ export async function getRepairJobDetail(id: string) {
     supabase.from("vehicles").select("*").eq("id", job.vehicle_id).maybeSingle(),
     supabase
       .from("repair_job_items")
-      .select("*")
+      .select("*, parts(id,part_code,name,unit,sale_price,quantity_on_hand)")
       .eq("repair_job_id", id)
       .is("deleted_at", null)
       .order("created_at", { ascending: false }),

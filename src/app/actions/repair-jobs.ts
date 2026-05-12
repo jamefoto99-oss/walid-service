@@ -22,6 +22,21 @@ const partUsageSchema = z.object({
   discount: z.coerce.number().min(0, "ส่วนลดต้องไม่ติดลบ").default(0),
 });
 
+const repairJobItemMutationSchema = z.object({
+  item_id: z.string().uuid("ไม่พบรายการซ่อม"),
+  title: z.string().trim().optional().nullable(),
+  description: z.string().trim().optional().nullable(),
+  labor_price: z.coerce.number().min(0, "ราคาต้องไม่ติดลบ"),
+  quantity: z.coerce.number().min(0.01, "จำนวนต้องมากกว่า 0"),
+  discount: z.coerce.number().min(0, "ส่วนลดต้องไม่ติดลบ").default(0),
+  part_id: z.preprocess(
+    (value) => (value === "" ? null : value),
+    z.string().uuid("กรุณาเลือกอะไหล่").nullable().optional(),
+  ),
+});
+
+const repairJobItemIdSchema = z.string().uuid("ไม่พบรายการซ่อม");
+
 const imagePathSchema = z
   .string()
   .trim()
@@ -81,6 +96,8 @@ async function recalculateRepairJobTotal(jobId: string) {
 function refreshRepairJob(jobId: string) {
   revalidatePath(`/repair-jobs/${jobId}`);
   revalidatePath("/repair-jobs");
+  revalidatePath("/parts");
+  revalidatePath("/reports");
   revalidatePath("/dashboard");
 }
 
@@ -181,6 +198,7 @@ export async function consumeRepairJobPart(jobId: string, input: unknown): Promi
       .from("repair_job_items")
       .insert({
         repair_job_id: jobId,
+        part_id: payload.part_id,
         title: itemTitle,
         description: itemDescription,
         labor_price: unitPrice,
@@ -199,6 +217,7 @@ export async function consumeRepairJobPart(jobId: string, input: unknown): Promi
       unit_cost: unitPrice,
       reference_type: "repair_job",
       reference_id: jobId,
+      repair_job_item_id: item.id,
       notes: `เบิกใช้ในงานซ่อม ${jobId}`,
     });
 
@@ -213,6 +232,52 @@ export async function consumeRepairJobPart(jobId: string, input: unknown): Promi
     return { ok: true, message: "เบิกอะไหล่และตัดสต๊อกแล้ว" };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "เกิดข้อผิดพลาด" };
+  }
+}
+
+export async function updateRepairJobItem(jobId: string, input: unknown): Promise<ActionResult> {
+  try {
+    await requireModuleAccess("repair-jobs", "read");
+    const supabase = await createSupabaseServerClient();
+    if (!supabase) return { ok: false, error: "ยังไม่ได้ตั้งค่า Supabase" };
+    const payload = repairJobItemMutationSchema.parse(input);
+
+    const { error } = await supabase.rpc("update_repair_job_item", {
+      p_job_id: jobId,
+      p_item_id: payload.item_id,
+      p_title: payload.title ?? null,
+      p_description: payload.description ?? null,
+      p_labor_price: payload.labor_price,
+      p_quantity: payload.quantity,
+      p_discount: payload.discount,
+      p_part_id: payload.part_id ?? null,
+    });
+    if (error) return { ok: false, error: error.message };
+
+    refreshRepairJob(jobId);
+    return { ok: true, message: "แก้ไขรายการในงานซ่อมแล้ว" };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "แก้ไขรายการในงานซ่อมไม่สำเร็จ" };
+  }
+}
+
+export async function deleteRepairJobItem(jobId: string, itemId: string): Promise<ActionResult> {
+  try {
+    await requireModuleAccess("repair-jobs", "read");
+    const supabase = await createSupabaseServerClient();
+    if (!supabase) return { ok: false, error: "ยังไม่ได้ตั้งค่า Supabase" };
+    const cleanItemId = repairJobItemIdSchema.parse(itemId);
+
+    const { error } = await supabase.rpc("delete_repair_job_item", {
+      p_job_id: jobId,
+      p_item_id: cleanItemId,
+    });
+    if (error) return { ok: false, error: error.message };
+
+    refreshRepairJob(jobId);
+    return { ok: true, message: "ลบรายการในงานซ่อมแล้ว" };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "ลบรายการในงานซ่อมไม่สำเร็จ" };
   }
 }
 
