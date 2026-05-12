@@ -36,8 +36,12 @@ export function SearchableSelect({
   const [query, setQuery] = useState(selectedOption?.label ?? "");
   const [open, setOpen] = useState(false);
   const listId = useId();
+  const visibleQuery = open ? query : selectedOption?.label ?? "";
 
-  const filteredOptions = useMemo(() => options.filter((option) => optionMatches(option, query)).slice(0, 30), [options, query]);
+  const filteredOptions = useMemo(
+    () => options.filter((option) => optionMatches(option, visibleQuery)).slice(0, 30),
+    [options, visibleQuery],
+  );
 
   function selectOption(option?: FieldOption) {
     onValueChange(option?.value ?? "", option);
@@ -56,8 +60,11 @@ export function SearchableSelect({
         aria-expanded={open}
         aria-autocomplete="list"
         placeholder={placeholder}
-        value={query}
-        onFocus={() => setOpen(true)}
+        value={visibleQuery}
+        onFocus={() => {
+          setQuery(selectedOption?.label ?? "");
+          setOpen(true);
+        }}
         onBlur={() => {
           window.setTimeout(() => {
             setOpen(false);

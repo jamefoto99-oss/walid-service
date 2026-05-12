@@ -10,8 +10,9 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { createPurchaseWithStock, paySupplierPurchase } from "@/app/actions/purchases";
 import { VoidDocumentAction } from "@/components/documents/void-document-action";
+import { SearchableSelect } from "@/components/forms/searchable-select";
 import { AuditTrailPanel } from "@/components/records/audit-trail-panel";
-import type { PurchasePageData, PurchasePart, PurchaseRow, UserRole } from "@/lib/types";
+import type { FieldOption, PurchasePageData, PurchasePart, PurchaseRow, UserRole } from "@/lib/types";
 import { financeRoles, paymentMethods, unitOptions } from "@/lib/constants";
 import { cn, formatCurrency, formatDate, toNumber } from "@/lib/utils";
 import { Badge } from "../ui/badge";
@@ -153,6 +154,19 @@ export function PurchaseManager({
 
   const partById = useMemo(
     () => new Map(data.parts.map((part) => [part.id, part])),
+    [data.parts],
+  );
+  const partOptions = useMemo<FieldOption[]>(
+    () =>
+      data.parts.map((part) => ({
+        label: partLabel(part),
+        value: part.id,
+        meta: {
+          cost_price: toNumber(part.cost_price),
+          sale_price: toNumber(part.sale_price),
+          unit: part.unit,
+        },
+      })),
     [data.parts],
   );
 
@@ -421,18 +435,15 @@ export function PurchaseManager({
                         {item.mode === "existing" ? (
                           <label className="lg:col-span-10">
                             <span className="text-xs font-semibold text-muted">อะไหล่ในระบบ</span>
-                            <select
-                              className={inputClass()}
+                            <SearchableSelect
+                              className="h-11 rounded-md border border-border bg-white px-3 py-2 text-sm outline-none focus:border-primary"
+                              containerClassName="mt-1"
+                              emptyText="ไม่พบอะไหล่"
+                              onValueChange={(partId) => updateItem(item.rowId, { part_id: partId })}
+                              options={partOptions}
+                              placeholder="พิมพ์รหัสอะไหล่หรือชื่ออะไหล่"
                               value={item.part_id}
-                              onChange={(event) => updateItem(item.rowId, { part_id: event.target.value })}
-                            >
-                              <option value="">เลือกอะไหล่</option>
-                              {data.parts.map((partOption) => (
-                                <option key={partOption.id} value={partOption.id}>
-                                  {partLabel(partOption)}
-                                </option>
-                              ))}
-                            </select>
+                            />
                           </label>
                         ) : (
                           <>

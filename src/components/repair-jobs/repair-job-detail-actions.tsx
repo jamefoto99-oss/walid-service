@@ -2,7 +2,7 @@
 
 import { BadgeDollarSign, FileText, MessageSquarePlus, PackageMinus, Plus, RefreshCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
   addRepairJobLaborItem,
@@ -13,7 +13,8 @@ import {
   updateRepairJobStatus,
 } from "@/app/actions/repair-jobs";
 import { financeRoles, repairStatuses } from "@/lib/constants";
-import type { UserRole } from "@/lib/types";
+import type { FieldOption, UserRole } from "@/lib/types";
+import { SearchableSelect } from "../forms/searchable-select";
 import { Button } from "../ui/button";
 
 type PartRow = {
@@ -24,6 +25,10 @@ type PartRow = {
   quantity_on_hand: number | string | null;
   unit: string | null;
 };
+
+function partSearchLabel(part: PartRow) {
+  return `${part.part_code ?? "-"} ${part.name ?? ""} | เหลือ ${part.quantity_on_hand ?? 0} ${part.unit ?? ""}`;
+}
 
 export function RepairJobDetailActions({
   jobId,
@@ -59,6 +64,19 @@ export function RepairJobDetailActions({
     show_paid_stamp: true,
   });
   const canUseStock = financeRoles.includes(role);
+  const partOptions = useMemo<FieldOption[]>(
+    () =>
+      parts.map((part) => ({
+        label: partSearchLabel(part),
+        value: part.id,
+        meta: {
+          quantity_on_hand: part.quantity_on_hand ?? 0,
+          sale_price: part.sale_price ?? 0,
+          unit: part.unit ?? "",
+        },
+      })),
+    [parts],
+  );
 
   function run(
     action: () => Promise<{ ok: boolean; message?: string; error?: string; href?: string }>,
@@ -218,18 +236,15 @@ export function RepairJobDetailActions({
             <div className="grid gap-3 md:grid-cols-2">
               <label className="md:col-span-2">
                 <span className="text-sm font-semibold">อะไหล่</span>
-                <select
-                  className="mt-1 h-11 w-full rounded-md border border-border bg-white px-3 text-sm outline-none focus:border-primary"
+                <SearchableSelect
+                  className="h-11 rounded-md border border-border bg-white px-3 py-2 text-sm outline-none focus:border-primary"
+                  containerClassName="mt-1"
+                  emptyText="ไม่พบอะไหล่"
+                  onValueChange={(partId) => setPartUsage((value) => ({ ...value, part_id: partId }))}
+                  options={partOptions}
+                  placeholder="พิมพ์รหัสอะไหล่หรือชื่ออะไหล่"
                   value={partUsage.part_id}
-                  onChange={(event) => setPartUsage((value) => ({ ...value, part_id: event.target.value }))}
-                >
-                  <option value="">เลือกอะไหล่</option>
-                  {parts.map((part) => (
-                    <option key={part.id} value={part.id}>
-                      {part.part_code} {part.name} - เหลือ {part.quantity_on_hand} {part.unit}
-                    </option>
-                  ))}
-                </select>
+                />
               </label>
               <label>
                 <span className="text-sm font-semibold">จำนวน</span>
