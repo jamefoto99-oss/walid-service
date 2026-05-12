@@ -8,11 +8,46 @@ import type { ActionResult } from "@/lib/types";
 
 const paymentMethodSchema = z.enum(["cash", "transfer", "qr", "other"]);
 
-const purchaseItemSchema = z.object({
-  part_id: z.string().uuid("กรุณาเลือกอะไหล่"),
-  quantity: z.coerce.number().min(0.01, "จำนวนต้องมากกว่า 0"),
-  unit_cost: z.coerce.number().min(0, "ราคาทุนต้องไม่ติดลบ"),
-});
+const purchaseItemSchema = z
+  .object({
+    part_id: z.preprocess(
+      (value) => (value === "" ? null : value),
+      z.string().uuid("กรุณาเลือกอะไหล่").nullable().optional(),
+    ),
+    part_code: z.string().trim().optional().nullable(),
+    name: z.string().trim().optional().nullable(),
+    unit: z.string().trim().optional().nullable(),
+    sale_price: z.coerce.number().min(0, "ราคาขายต้องไม่ติดลบ").optional().nullable(),
+    quantity: z.coerce.number().min(0.01, "จำนวนต้องมากกว่า 0"),
+    unit_cost: z.coerce.number().min(0, "ราคาทุนต้องไม่ติดลบ"),
+  })
+  .superRefine((item, ctx) => {
+    if (item.part_id) return;
+
+    if (!item.part_code?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["part_code"],
+        message: "กรุณาระบุรหัสอะไหล่ใหม่",
+      });
+    }
+
+    if (!item.name?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["name"],
+        message: "กรุณาระบุชื่ออะไหล่ใหม่",
+      });
+    }
+  })
+  .transform((item) => ({
+    ...item,
+    part_id: item.part_id ?? null,
+    part_code: item.part_id ? null : item.part_code?.trim() ?? null,
+    name: item.part_id ? null : item.name?.trim() ?? null,
+    unit: item.part_id ? null : item.unit?.trim() || "ชิ้น",
+    sale_price: item.part_id ? null : item.sale_price ?? item.unit_cost,
+  }));
 
 const createPurchaseSchema = z.object({
   supplier_id: z.string().uuid("กรุณาเลือก Supplier"),

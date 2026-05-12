@@ -12,7 +12,7 @@ import { createPurchaseWithStock, paySupplierPurchase } from "@/app/actions/purc
 import { VoidDocumentAction } from "@/components/documents/void-document-action";
 import { AuditTrailPanel } from "@/components/records/audit-trail-panel";
 import type { PurchasePageData, PurchasePart, PurchaseRow, UserRole } from "@/lib/types";
-import { financeRoles, paymentMethods } from "@/lib/constants";
+import { financeRoles, paymentMethods, unitOptions } from "@/lib/constants";
 import { cn, formatCurrency, formatDate, toNumber } from "@/lib/utils";
 import { Badge } from "../ui/badge";
 import { Button, ButtonLink } from "../ui/button";
@@ -40,15 +40,27 @@ type PayFormValues = z.output<typeof payFormSchema>;
 
 type DraftPurchaseItem = {
   rowId: string;
+  mode: "existing" | "new";
   part_id: string;
+  part_code: string;
+  name: string;
+  unit: string;
+  sale_price: number;
   quantity: number;
   unit_cost: number;
 };
 
+const defaultPurchaseUnit = unitOptions[0]?.value ?? "ชิ้น";
+
 function blankItem(): DraftPurchaseItem {
   return {
     rowId: globalThis.crypto?.randomUUID?.() ?? String(Date.now()),
+    mode: "existing",
     part_id: "",
+    part_code: "",
+    name: "",
+    unit: defaultPurchaseUnit,
+    sale_price: 0,
     quantity: 1,
     unit_cost: 0,
   };
@@ -194,8 +206,20 @@ export function PurchaseManager({
       current.map((item) => {
         if (item.rowId !== rowId) return item;
         const next = { ...item, ...patch };
-        if (patch.part_id) {
-          next.unit_cost = toNumber(partById.get(patch.part_id)?.cost_price);
+        if (patch.mode === "new") {
+          next.part_id = "";
+          next.unit = next.unit || defaultPurchaseUnit;
+        }
+        if (patch.mode === "existing") {
+          next.part_code = "";
+          next.name = "";
+          next.sale_price = 0;
+        }
+        if (patch.part_id !== undefined) {
+          const selectedPart = partById.get(patch.part_id);
+          next.unit_cost = toNumber(selectedPart?.cost_price);
+          next.sale_price = toNumber(selectedPart?.sale_price);
+          next.unit = selectedPart?.unit ?? defaultPurchaseUnit;
         }
         return next;
       }),
@@ -207,11 +231,41 @@ export function PurchaseManager({
   }
 
   function submitPurchase(values: PurchaseFormValues) {
-    const cleanItems = items.map(({ part_id, quantity, unit_cost }) => ({ part_id, quantity, unit_cost }));
-    if (cleanItems.some((item) => !item.part_id)) {
+    const hasMissingExistingPart = items.some((item) => item.mode === "existing" && !item.part_id);
+    if (hasMissingExistingPart) {
       toast.error("กรุณาเลือกอะไหล่ให้ครบทุกแถว");
       return;
     }
+
+    const hasMissingNewPart = items.some((item) => item.mode === "new" && (!item.part_code.trim() || !item.name.trim()));
+    if (hasMissingNewPart) {
+      toast.error("กรุณาระบุรหัสอะไหล่และชื่ออะไหล่ใหม่ให้ครบ");
+      return;
+    }
+
+    const cleanItems = items.map((item) => {
+      const quantity = toNumber(item.quantity);
+      const unit_cost = toNumber(item.unit_cost);
+
+      if (item.mode === "new") {
+        return {
+          part_id: null,
+          part_code: item.part_code.trim(),
+          name: item.name.trim(),
+          unit: item.unit.trim() || defaultPurchaseUnit,
+          sale_price: toNumber(item.sale_price) > 0 ? toNumber(item.sale_price) : unit_cost,
+          quantity,
+          unit_cost,
+        };
+      }
+
+      return {
+        part_id: item.part_id,
+        quantity,
+        unit_cost,
+      };
+    });
+
     if (toNumber(values.paid_amount) > totals.total) {
       toast.error("ยอดจ่ายแล้วมากกว่ายอดรวมใบซื้อ");
       return;
@@ -348,44 +402,129 @@ export function PurchaseManager({
                 {items.map((item) => {
                   const part = partById.get(item.part_id);
                   return (
-                    <div key={item.rowId} className="grid gap-2 rounded-md border border-border bg-surface p-3 lg:grid-cols-12">
-                      <select
-                        className={cn(inputClass(), "lg:col-span-6")}
-                        value={item.part_id}
-                        onChange={(event) => updateItem(item.rowId, { part_id: event.target.value })}
-                      >
-                        <option value="">เลือกอะไหล่</option>
-                        {data.parts.map((partOption) => (
-                          <option key={partOption.id} value={partOption.id}>
-                            {partLabel(partOption)}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        className={cn(inputClass(), "lg:col-span-2")}
-                        min="0.01"
-                        step="0.01"
-                        type="number"
-                        value={item.quantity}
-                        onChange={(event) => updateItem(item.rowId, { quantity: toNumber(event.target.value) })}
-                        aria-label="จำนวน"
-                      />
-                      <input
-                        className={cn(inputClass(), "lg:col-span-2")}
-                        min="0"
-                        step="0.01"
-                        type="number"
-                        value={item.unit_cost}
-                        onChange={(event) => updateItem(item.rowId, { unit_cost: toNumber(event.target.value) })}
-                        aria-label="ราคาทุนต่อหน่วย"
-                      />
-                      <div className="flex min-h-11 items-center justify-between gap-2 rounded-md border border-border bg-white px-3 text-sm lg:col-span-1">
-                        <span className="font-semibold">{formatCurrency(toNumber(item.quantity) * toNumber(item.unit_cost))}</span>
-                        <span className="text-muted">{part?.unit ?? ""}</span>
+                    <div key={item.rowId} className="space-y-3 rounded-md border border-border bg-surface p-3">
+                      <div className="grid gap-3 lg:grid-cols-12">
+                        <label className="lg:col-span-2">
+                          <span className="text-xs font-semibold text-muted">ประเภท</span>
+                          <select
+                            className={inputClass()}
+                            value={item.mode}
+                            onChange={(event) =>
+                              updateItem(item.rowId, { mode: event.target.value as DraftPurchaseItem["mode"] })
+                            }
+                          >
+                            <option value="existing">เลือกจากสต๊อก</option>
+                            <option value="new">เพิ่มอะไหล่ใหม่</option>
+                          </select>
+                        </label>
+
+                        {item.mode === "existing" ? (
+                          <label className="lg:col-span-10">
+                            <span className="text-xs font-semibold text-muted">อะไหล่ในระบบ</span>
+                            <select
+                              className={inputClass()}
+                              value={item.part_id}
+                              onChange={(event) => updateItem(item.rowId, { part_id: event.target.value })}
+                            >
+                              <option value="">เลือกอะไหล่</option>
+                              {data.parts.map((partOption) => (
+                                <option key={partOption.id} value={partOption.id}>
+                                  {partLabel(partOption)}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        ) : (
+                          <>
+                            <label className="lg:col-span-3">
+                              <span className="text-xs font-semibold text-muted">รหัสอะไหล่ใหม่</span>
+                              <input
+                                className={inputClass()}
+                                value={item.part_code}
+                                onChange={(event) => updateItem(item.rowId, { part_code: event.target.value })}
+                                placeholder="เช่น CL-001"
+                              />
+                            </label>
+                            <label className="lg:col-span-5">
+                              <span className="text-xs font-semibold text-muted">ชื่ออะไหล่ / รายละเอียดสินค้า</span>
+                              <input
+                                className={inputClass()}
+                                value={item.name}
+                                onChange={(event) => updateItem(item.rowId, { name: event.target.value })}
+                                placeholder="พิมพ์ชื่ออะไหล่ที่ต้องการรับเข้า"
+                              />
+                            </label>
+                            <label className="lg:col-span-2">
+                              <span className="text-xs font-semibold text-muted">หน่วยนับ</span>
+                              <input
+                                className={inputClass()}
+                                list={`purchase-unit-options-${item.rowId}`}
+                                value={item.unit}
+                                onChange={(event) => updateItem(item.rowId, { unit: event.target.value })}
+                                placeholder="ชิ้น / ชุด / อื่น ๆ"
+                              />
+                              <datalist id={`purchase-unit-options-${item.rowId}`}>
+                                {unitOptions.map((option) => (
+                                  <option key={option.value} value={option.value}>
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </datalist>
+                            </label>
+                          </>
+                        )}
                       </div>
-                      <Button type="button" variant="ghost" className="h-11 px-0 lg:col-span-1" onClick={() => removeItem(item.rowId)}>
-                        <Trash2 className="h-4 w-4 text-danger" />
-                      </Button>
+
+                      <div className="grid gap-3 lg:grid-cols-12">
+                        <label className="lg:col-span-2">
+                          <span className="text-xs font-semibold text-muted">จำนวนรับเข้า</span>
+                          <input
+                            className={inputClass()}
+                            min="0.01"
+                            step="0.01"
+                            type="number"
+                            value={item.quantity}
+                            onChange={(event) => updateItem(item.rowId, { quantity: toNumber(event.target.value) })}
+                          />
+                        </label>
+                        <label className="lg:col-span-3">
+                          <span className="text-xs font-semibold text-muted">ราคาทุนต่อหน่วย</span>
+                          <input
+                            className={inputClass()}
+                            min="0"
+                            step="0.01"
+                            type="number"
+                            value={item.unit_cost}
+                            onChange={(event) => updateItem(item.rowId, { unit_cost: toNumber(event.target.value) })}
+                          />
+                        </label>
+                        {item.mode === "new" ? (
+                          <label className="lg:col-span-3">
+                            <span className="text-xs font-semibold text-muted">ราคาขายต่อหน่วย</span>
+                            <input
+                              className={inputClass()}
+                              min="0"
+                              step="0.01"
+                              type="number"
+                              value={item.sale_price}
+                              onChange={(event) => updateItem(item.rowId, { sale_price: toNumber(event.target.value) })}
+                              placeholder="ไม่กรอกใช้ราคาทุน"
+                            />
+                          </label>
+                        ) : (
+                          <div className="flex min-h-11 items-center justify-between gap-2 rounded-md border border-border bg-white px-3 text-sm lg:col-span-3">
+                            <span className="text-muted">หน่วยนับ</span>
+                            <span className="font-semibold">{part?.unit ?? "-"}</span>
+                          </div>
+                        )}
+                        <div className="flex min-h-11 items-center justify-between gap-2 rounded-md border border-border bg-white px-3 text-sm lg:col-span-3">
+                          <span className="text-muted">รวมแถวนี้</span>
+                          <span className="font-semibold">{formatCurrency(toNumber(item.quantity) * toNumber(item.unit_cost))}</span>
+                        </div>
+                        <Button type="button" variant="ghost" className="h-11 px-0 lg:col-span-1" onClick={() => removeItem(item.rowId)}>
+                          <Trash2 className="h-4 w-4 text-danger" />
+                        </Button>
+                      </div>
                     </div>
                   );
                 })}
