@@ -112,7 +112,7 @@ function lineItemsFromRow(row?: Record<string, unknown>, moduleKey?: string): Li
     const record = item as Record<string, unknown>;
     const rawType = String(record.item_type ?? "labor");
     const itemType: LineItemInput["item_type"] =
-      rawType === "part" ? "part" : rawType === "other" ? "other" : "labor";
+      moduleKey === "cash-bills" ? "part" : rawType === "part" ? "part" : rawType === "other" ? "other" : "labor";
 
     return {
       item_type: itemType,
@@ -449,6 +449,7 @@ function EntityFormDialog({
                 <div className="md:col-span-2" key={field.name}>
                   <input type="hidden" value={JSON.stringify(items)} {...form.register(field.name)} />
                   <LineItemsField
+                    allowedItemTypes={config.key === "cash-bills" ? ["part"] : undefined}
                     defaultItemType={config.key === "cash-bills" ? "part" : "labor"}
                     items={items}
                     onChange={setItems}

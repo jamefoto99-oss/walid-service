@@ -23,6 +23,12 @@ function blankItem(itemType: LineItemInput["item_type"] = "labor"): LineItemInpu
 const inputClass =
   "mt-1 h-11 w-full rounded-md border border-border bg-white px-3 text-sm outline-none focus:border-primary";
 
+const itemTypeOptions: Array<{ label: string; value: LineItemInput["item_type"] }> = [
+  { label: "ค่าแรง", value: "labor" },
+  { label: "อะไหล่", value: "part" },
+  { label: "อื่น ๆ", value: "other" },
+];
+
 function itemTotal(item: LineItemInput) {
   return Math.max(toNumber(item.quantity) * toNumber(item.unit_price) - toNumber(item.discount), 0);
 }
@@ -32,13 +38,19 @@ export function LineItemsField({
   onChange,
   partOptions,
   defaultItemType = "labor",
+  allowedItemTypes,
 }: {
   items: LineItemInput[];
   onChange: (items: LineItemInput[]) => void;
   partOptions: FieldOption[];
   defaultItemType?: LineItemInput["item_type"];
+  allowedItemTypes?: LineItemInput["item_type"][];
 }) {
   const unitListId = "line-item-unit-options";
+  const visibleItemTypes = itemTypeOptions.filter((option) => !allowedItemTypes || allowedItemTypes.includes(option.value));
+  const effectiveDefaultItemType = visibleItemTypes.some((option) => option.value === defaultItemType)
+    ? defaultItemType
+    : visibleItemTypes[0]?.value ?? defaultItemType;
 
   function update(index: number, patch: Partial<LineItemInput>) {
     onChange(items.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item)));
@@ -56,7 +68,7 @@ export function LineItemsField({
   }
 
   function remove(index: number) {
-    onChange(items.length <= 1 ? [blankItem(defaultItemType)] : items.filter((_, itemIndex) => itemIndex !== index));
+    onChange(items.length <= 1 ? [blankItem(effectiveDefaultItemType)] : items.filter((_, itemIndex) => itemIndex !== index));
   }
 
   const subtotal = items.reduce((sum, item) => sum + itemTotal(item), 0);
@@ -68,7 +80,7 @@ export function LineItemsField({
           <p className="text-sm font-semibold">รายการค่าแรง / อะไหล่</p>
           <p className="text-xs text-muted">พิมพ์รายละเอียดเองได้ หรือค้นหาอะไหล่จากสต๊อกเพื่อดึงหน่วยนับมาเติมอัตโนมัติ</p>
         </div>
-        <Button type="button" variant="secondary" className="h-10" onClick={() => onChange([...items, blankItem(defaultItemType)])}>
+        <Button type="button" variant="secondary" className="h-10" onClick={() => onChange([...items, blankItem(effectiveDefaultItemType)])}>
           <Plus className="h-4 w-4" />
           เพิ่มรายการ
         </Button>
@@ -90,12 +102,14 @@ export function LineItemsField({
                 <span className="text-xs font-semibold text-muted">ประเภทรายการ</span>
                 <select
                   className={inputClass}
-                  value={item.item_type}
+                  value={visibleItemTypes.some((option) => option.value === item.item_type) ? item.item_type : effectiveDefaultItemType}
                   onChange={(event) => update(index, { item_type: event.target.value as LineItemInput["item_type"] })}
                 >
-                  <option value="labor">ค่าแรง</option>
-                  <option value="part">อะไหล่</option>
-                  <option value="other">อื่น ๆ</option>
+                  {visibleItemTypes.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </label>
 
