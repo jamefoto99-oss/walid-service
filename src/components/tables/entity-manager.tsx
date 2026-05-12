@@ -75,6 +75,10 @@ function csvTemplateHref(moduleKey: string) {
 }
 
 function defaultValue(field: FieldConfig, row?: Record<string, unknown>, initialValues?: Record<string, string>) {
+  if (field.type === "checkbox") {
+    const value = row?.[field.name] ?? initialValues?.[field.name] ?? false;
+    return value === true || value === "true" || value === "on" || value === "1";
+  }
   if (row?.[field.name] !== undefined && row?.[field.name] !== null) return String(row[field.name]);
   if (initialValues?.[field.name] !== undefined) return String(initialValues[field.name]);
   if (field.type === "date") return new Date().toISOString().slice(0, 10);
@@ -142,6 +146,16 @@ function FieldControl({
   if (field.type === "select") {
     const options = field.optionsKey ? references[field.optionsKey] : field.options ?? [];
     return <SearchableFieldControl baseClass={baseClass} control={control} fieldName={field.name} options={options} />;
+  }
+
+  if (field.type === "checkbox") {
+    return (
+      <input
+        className="mt-2 h-5 w-5 rounded border-border accent-primary"
+        type="checkbox"
+        {...register(field.name)}
+      />
+    );
   }
 
   return (

@@ -16,6 +16,8 @@ const labels: Record<string, string> = {
   "cash-bills": "บิลเงินสด",
 };
 
+type SignatureDefinition = { label: string; date?: boolean };
+
 let fontsLoaded = false;
 
 function ensureFonts() {
@@ -62,6 +64,25 @@ function hasPaymentInfo(company: Record<string, unknown> | null) {
 function displayValue(value: unknown) {
   const text = String(value ?? "").trim();
   return text && text !== "-" ? text : "";
+}
+
+function flagValue(value: unknown) {
+  return value === true || value === "true" || value === "1" || value === 1;
+}
+
+function signatureDefinitions(type: string): SignatureDefinition[] {
+  if (type === "quotations") {
+    return [
+      { label: "ผู้อนุมัติซื้อ" },
+      { label: "ผู้เสนอราคา" },
+      { label: "ผู้จัดการ" },
+    ];
+  }
+  if (type === "invoices") return [{ label: "ผู้อนุมัติ" }, { label: "ผู้รับใบแจ้งหนี้" }];
+  if (type === "receipts") return [{ label: "ผู้จ่ายเงิน", date: true }, { label: "ผู้รับเงิน", date: true }];
+  if (type === "billing-statements") return [{ label: "ผู้วางบิล", date: true }, { label: "ผู้รับวางบิล", date: true }];
+  if (type === "cash-bills") return [{ label: "ผู้จ่ายเงิน" }, { label: "ผู้รับเงิน" }];
+  return [{ label: "ลูกค้า" }, { label: "ผู้รับผิดชอบ" }];
 }
 
 function fontRuns(value: unknown): Content {
@@ -130,6 +151,9 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
 
   const { document, company, customer, vehicle, items } = data;
   const cancelled = isCancelledDocument(document);
+  const showPaymentInfo = type !== "repair-job" && flagValue(document.show_payment_info);
+  const showPaidStamp = type !== "repair-job" && flagValue(document.show_paid_stamp);
+  const signatures = signatureDefinitions(type);
   const logoDataUrl = await logoImageDataUrl(company?.logo_url);
   const bankLogoDataUrl = await logoImageDataUrl(company?.bank_logo_url);
   const companyName = displayValue(company?.company_name) || "อู่วาลิดการช่าง";
@@ -168,16 +192,17 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
         ? [
             {
               table: {
-                widths: ["*", 64, 64, 72, 72, 72],
+                widths: [26, "*", 62, 62, 70, 70, 70],
                 body: [
-                  ["ใบแจ้งหนี้", "วันที่ออก", "ครบกำหนด", "ยอดรวม", "ชำระแล้ว", "ยอดค้าง"],
-                  ...items.map((item) => [
+                  ["ลำดับ", "ใบแจ้งหนี้", "วันที่ออก", "ครบกำหนด", "ยอดรวม", "ชำระแล้ว", "ยอดค้าง"],
+                  ...items.map((item, index) => [
+                    pdfText(index + 1, { alignment: "center" }),
                     pdfText(item.invoice_no ?? "-"),
                     pdfText(formatPdfDate(item.issued_at)),
                     pdfText(formatPdfDate(item.due_at)),
-                    pdfText(formatPdfCurrency(item.total)),
-                    pdfText(formatPdfCurrency(item.paid_amount)),
-                    pdfText(formatPdfCurrency(item.balance_due), { bold: true }),
+                    pdfText(formatPdfCurrency(item.total), { alignment: "right" }),
+                    pdfText(formatPdfCurrency(item.paid_amount), { alignment: "right" }),
+                    pdfText(formatPdfCurrency(item.balance_due), { bold: true, alignment: "right" }),
                   ]),
                 ],
               },
@@ -190,16 +215,16 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
                 {
                   width: 220,
                   table: {
-                    widths: ["*", 90],
+                    widths: ["*", 100],
                     body: [
-                      ["ยอดรวมใบวางบิล", pdfText(formatPdfCurrency(document.subtotal ?? document.total))],
+                      [{ text: "ยอดรวมใบวางบิล", alignment: "right" }, pdfText(formatPdfCurrency(document.subtotal ?? document.total), { alignment: "right" })],
                       [
-                        { text: "ยอดสุทธิ", bold: true },
-                        pdfText(formatPdfCurrency(document.total), { bold: true }),
+                        { text: "ยอดสุทธิ", bold: true, alignment: "right" },
+                        pdfText(formatPdfCurrency(document.total), { bold: true, alignment: "right" }),
                       ],
                     ],
                   },
-                  layout: "noBorders",
+                  layout: "lightHorizontalLines",
                 },
               ],
             },
@@ -207,16 +232,17 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
       : [
           {
             table: {
-              widths: ["*", 40, 40, 65, 65, 75],
+              widths: [26, "*", 38, 40, 65, 65, 75],
               body: [
-                ["รายการ", "จำนวน", "หน่วย", "ราคา", "ส่วนลด", "รวม"],
-                ...items.map((item) => [
+                ["ลำดับ", "รายการ", "จำนวน", "หน่วย", "ราคา", "ส่วนลด", "รวม"],
+                ...items.map((item, index) => [
+                  pdfText(index + 1, { alignment: "center" }),
                   pdfText(item.description ?? "-"),
-                  pdfText(item.quantity ?? 1),
-                  pdfText(item.unit ?? "ชิ้น"),
-                  pdfText(formatPdfCurrency(item.unit_price)),
-                  pdfText(formatPdfCurrency(item.discount)),
-                  pdfText(formatPdfCurrency(item.total)),
+                  pdfText(item.quantity ?? 1, { alignment: "right" }),
+                  pdfText(item.unit ?? "ชิ้น", { alignment: "right" }),
+                  pdfText(formatPdfCurrency(item.unit_price), { alignment: "right" }),
+                  pdfText(formatPdfCurrency(item.discount), { alignment: "right" }),
+                  pdfText(formatPdfCurrency(item.total), { alignment: "right" }),
                 ]),
               ],
             },
@@ -229,17 +255,17 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
               {
                 width: 220,
                 table: {
-                  widths: ["*", 90],
+                  widths: ["*", 100],
                   body: [
-                    ["ยอดรวม", pdfText(formatPdfCurrency(document.subtotal ?? document.amount))],
-                    ["ส่วนลด", pdfText(formatPdfCurrency(document.discount))],
+                    [{ text: "ยอดรวม", alignment: "right" }, pdfText(formatPdfCurrency(document.subtotal ?? document.amount), { alignment: "right" })],
+                    [{ text: "ส่วนลด", alignment: "right" }, pdfText(formatPdfCurrency(document.discount), { alignment: "right" })],
                     [
-                      { text: "ยอดสุทธิ", bold: true },
-                      pdfText(formatPdfCurrency(document.total ?? document.amount), { bold: true }),
+                      { text: "ยอดสุทธิ", bold: true, alignment: "right" },
+                      pdfText(formatPdfCurrency(document.total ?? document.amount), { bold: true, alignment: "right" }),
                     ],
                   ],
                 },
-                layout: "noBorders",
+                layout: "lightHorizontalLines",
               },
             ],
           },
@@ -294,7 +320,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
       ]
     : [];
   const paymentContent: Content[] =
-    type !== "repair-job" && hasPaymentInfo(company)
+    showPaymentInfo && hasPaymentInfo(company)
       ? [
           {
             margin: [0, 16, 0, 0],
@@ -352,9 +378,29 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
     ...(vehicleDetail ? [pdfText(vehicleDetail)] : []),
     ...(mileage ? [pdfText(`เลขไมล์ ${mileage}`)] : []),
   ];
-  const infoColumns: Content[] = vehicleLines.length
-    ? [{ stack: customerLines }, { stack: [{ text: "ข้อมูลรถ", bold: true }, ...vehicleLines] }]
-    : [{ stack: customerLines }];
+  const infoStacks: Content[][] = vehicleLines.length
+    ? [customerLines, [{ text: "ข้อมูลรถ", bold: true }, ...vehicleLines]]
+    : [customerLines];
+  const infoSection: Content = {
+    margin: [0, 20, 0, 12],
+    table: {
+      widths: vehicleLines.length ? ["*", "*"] : ["*"],
+      body: [
+        infoStacks.map((stack) => ({
+          stack,
+          margin: [8, 6, 8, 6],
+        })),
+      ],
+    },
+    layout: {
+      hLineColor: () => "#d4d4d8",
+      vLineColor: () => "#d4d4d8",
+      paddingTop: () => 4,
+      paddingBottom: () => 4,
+      paddingLeft: () => 4,
+      paddingRight: () => 4,
+    },
+  };
   const noteText = displayValue(document.notes);
   const noteContent: Content[] = noteText
     ? [
@@ -362,6 +408,52 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
         pdfText(noteText),
       ]
     : [];
+  const titleStack: Content[] = [
+    { text: labels[type] ?? "เอกสาร", style: "title", alignment: "right" },
+    pdfText(docNo(type, document), { alignment: "right" }),
+    pdfText(`วันที่ ${formatPdfDate(document.issued_at ?? document.received_at ?? document.created_at)}`, { alignment: "right" }),
+    ...(showPaidStamp
+      ? [
+          {
+            margin: [0, 8, 0, 0],
+            table: {
+              widths: [78],
+              body: [[{ text: "จ่ายแล้ว", alignment: "center", bold: true, color: "#047857" }]],
+            },
+            layout: {
+              hLineColor: () => "#047857",
+              vLineColor: () => "#047857",
+              hLineWidth: () => 1.5,
+              vLineWidth: () => 1.5,
+              paddingTop: () => 4,
+              paddingBottom: () => 4,
+            },
+          } as Content,
+        ]
+      : []),
+  ];
+  const signatureContent: Content = {
+    margin: [0, 70, 0, 0],
+    columnGap: 18,
+    columns: signatures.map((signature) => ({
+      width: "*",
+      stack: [
+        {
+          canvas: [{ type: "line", x1: 12, y1: 0, x2: signatures.length === 3 ? 145 : 215, y2: 0, lineWidth: 1, lineColor: "#71717a" }],
+          margin: [0, 0, 0, 6],
+        },
+        pdfText(signature.label, { alignment: "center" }),
+        ...(signature.date
+          ? [
+              pdfText("วันที่ ........../........../..........", {
+                alignment: "center",
+                margin: [0, 10, 0, 0],
+              }),
+            ]
+          : []),
+      ],
+    })),
+  };
 
   const definition: TDocumentDefinitions = {
     pageSize: "A4",
@@ -374,47 +466,16 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
       {
         columns: [
           companyHeader,
-          [
-            { text: labels[type] ?? "เอกสาร", style: "title", alignment: "right" },
-            pdfText(docNo(type, document), { alignment: "right" }),
-            pdfText(`วันที่ ${formatPdfDate(document.issued_at ?? document.received_at ?? document.created_at)}`, { alignment: "right" }),
-          ],
+          titleStack,
         ],
       },
       { canvas: [{ type: "line", x1: 0, y1: 12, x2: 523, y2: 12, lineWidth: 1, lineColor: "#d4d4d4" }] },
       ...cancellationContent,
-      {
-        margin: [0, 20, 0, 12],
-        columns: infoColumns,
-      },
+      infoSection,
       ...detailContent,
       ...paymentContent,
       ...noteContent,
-      {
-        margin: [0, 70, 0, 0],
-        columns: [
-          {
-            width: "*",
-            stack: [
-              {
-                canvas: [{ type: "line", x1: 36, y1: 0, x2: 226, y2: 0, lineWidth: 1, lineColor: "#71717a" }],
-                margin: [0, 0, 0, 6],
-              },
-              pdfText("ผู้จ่ายเงิน", { alignment: "center" }),
-            ],
-          },
-          {
-            width: "*",
-            stack: [
-              {
-                canvas: [{ type: "line", x1: 36, y1: 0, x2: 226, y2: 0, lineWidth: 1, lineColor: "#71717a" }],
-                margin: [0, 0, 0, 6],
-              },
-              pdfText("ผู้รับเงิน", { alignment: "center" }),
-            ],
-          },
-        ],
-      },
+      signatureContent,
     ],
     styles: {
       company: { fontSize: 16, bold: true },

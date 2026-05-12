@@ -12,6 +12,8 @@ const labels: Record<string, string> = {
   "cash-bills": "บิลเงินสด",
 };
 
+type SignatureDefinition = { label: string; date?: boolean };
+
 function documentNumber(type: string, document: Record<string, unknown>) {
   if (type === "repair-job") return document.job_number;
   if (type === "quotations") return document.quotation_no;
@@ -29,6 +31,19 @@ function hasPaymentInfo(company: Record<string, unknown> | null) {
 function displayValue(value: unknown) {
   const text = String(value ?? "").trim();
   return text && text !== "-" ? text : "";
+}
+
+function flagValue(value: unknown) {
+  return value === true || value === "true" || value === "1" || value === 1;
+}
+
+function signatureDefinitions(type: string): SignatureDefinition[] {
+  if (type === "quotations") return [{ label: "ผู้อนุมัติซื้อ" }, { label: "ผู้เสนอราคา" }, { label: "ผู้จัดการ" }];
+  if (type === "invoices") return [{ label: "ผู้อนุมัติ" }, { label: "ผู้รับใบแจ้งหนี้" }];
+  if (type === "receipts") return [{ label: "ผู้จ่ายเงิน", date: true }, { label: "ผู้รับเงิน", date: true }];
+  if (type === "billing-statements") return [{ label: "ผู้วางบิล", date: true }, { label: "ผู้รับวางบิล", date: true }];
+  if (type === "cash-bills") return [{ label: "ผู้จ่ายเงิน" }, { label: "ผู้รับเงิน" }];
+  return [{ label: "ลูกค้า" }, { label: "ผู้รับผิดชอบ" }];
 }
 
 function isCancelledDocument(document: Record<string, unknown>) {
@@ -69,6 +84,9 @@ export function DocumentPrint({
   const mileage = displayValue(document.intake_mileage ?? vehicle?.mileage);
   const hasVehicleInfo = Boolean(vehicleIdentity || vehicleDetail || mileage);
   const noteText = displayValue(document.notes);
+  const showPaymentInfo = type !== "repair-job" && flagValue(document.show_payment_info);
+  const showPaidStamp = type !== "repair-job" && flagValue(document.show_paid_stamp);
+  const signatures = signatureDefinitions(type);
 
   return (
     <main className="min-h-screen bg-background p-4 print:bg-white">
@@ -104,6 +122,11 @@ export function DocumentPrint({
             <h1 className="text-3xl font-bold">{title}</h1>
             <p className="mt-2 font-mono text-sm">{String(documentNumber(type, document))}</p>
             <p className="text-sm text-zinc-600">วันที่ {formatDate(document.issued_at ?? document.received_at ?? document.created_at)}</p>
+            {showPaidStamp ? (
+              <div className="mt-3 inline-flex rotate-[-3deg] rounded-sm border-2 border-emerald-700 px-4 py-1 text-base font-black text-emerald-700">
+                จ่ายแล้ว
+              </div>
+            ) : null}
             {cancelled ? (
               <div className="mt-3 inline-flex rounded-md border-2 border-red-700 px-3 py-1 text-sm font-bold text-red-700">
                 ยกเลิกแล้ว
@@ -124,15 +147,15 @@ export function DocumentPrint({
           </section>
         ) : null}
 
-        <section className={cn("grid gap-6 border-b border-zinc-300 py-6", hasVehicleInfo && "md:grid-cols-2")}>
-          <div>
+        <section className={cn("grid gap-4 border-b border-zinc-300 py-6", hasVehicleInfo && "md:grid-cols-2")}>
+          <div className="rounded-md border border-zinc-300 p-4">
             <h2 className="font-semibold">ข้อมูลลูกค้า</h2>
             <p className="mt-2">{displayValue(customer?.full_name) || "-"}</p>
             {customerPhone ? <p className="text-sm text-zinc-600">โทร {customerPhone}</p> : null}
             {customerAddress ? <p className="text-sm text-zinc-600">{customerAddress}</p> : null}
           </div>
           {hasVehicleInfo ? (
-            <div>
+            <div className="rounded-md border border-zinc-300 p-4">
               <h2 className="font-semibold">ข้อมูลรถ</h2>
               {vehicleIdentity ? <p className="mt-2">{vehicleIdentity}</p> : null}
               {vehicleDetail ? <p className="text-sm text-zinc-600">{vehicleDetail}</p> : null}
@@ -158,9 +181,11 @@ export function DocumentPrint({
           </section>
         ) : type === "billing-statements" ? (
           <section className="border-b border-zinc-300 py-6">
+            <div className="rounded-md border border-zinc-300 p-3">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-zinc-300 text-left">
+                  <th className="w-12 py-2 text-center">ลำดับ</th>
                   <th className="py-2">ใบแจ้งหนี้</th>
                   <th className="py-2">วันที่ออก</th>
                   <th className="py-2">ครบกำหนด</th>
@@ -170,8 +195,9 @@ export function DocumentPrint({
                 </tr>
               </thead>
               <tbody>
-                {items.map((item) => (
+                {items.map((item, index) => (
                   <tr className="border-b border-zinc-200" key={String(item.id)}>
+                    <td className="py-3 text-center">{index + 1}</td>
                     <td className="py-3 font-semibold">{String(item.invoice_no ?? "-")}</td>
                     <td className="py-3">{formatDate(item.issued_at)}</td>
                     <td className="py-3">{formatDate(item.due_at)}</td>
@@ -182,7 +208,8 @@ export function DocumentPrint({
                 ))}
               </tbody>
             </table>
-            <div className="ml-auto mt-6 w-full max-w-sm space-y-2 text-sm">
+            </div>
+            <div className="ml-auto mt-4 w-full max-w-sm rounded-md border border-zinc-300 p-3 text-sm">
               <div className="flex justify-between">
                 <span>ยอดรวมใบวางบิล</span>
                 <span>{formatCurrency(document.subtotal ?? document.total)}</span>
@@ -195,9 +222,11 @@ export function DocumentPrint({
           </section>
         ) : (
           <section className="border-b border-zinc-300 py-6">
+            <div className="rounded-md border border-zinc-300 p-3">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-zinc-300 text-left">
+                  <th className="w-12 py-2 text-center">ลำดับ</th>
                   <th className="py-2">รายการ</th>
                   <th className="py-2 text-right">จำนวน</th>
                   <th className="py-2 text-right">หน่วย</th>
@@ -207,8 +236,9 @@ export function DocumentPrint({
                 </tr>
               </thead>
               <tbody>
-                {items.map((item) => (
+                {items.map((item, index) => (
                   <tr className="border-b border-zinc-200" key={String(item.id)}>
+                    <td className="py-3 text-center">{index + 1}</td>
                     <td className="py-3">{String(item.description ?? "-")}</td>
                     <td className="py-3 text-right">{String(item.quantity ?? 1)}</td>
                     <td className="py-3 text-right">{String(item.unit ?? "ชิ้น")}</td>
@@ -219,7 +249,8 @@ export function DocumentPrint({
                 ))}
               </tbody>
             </table>
-            <div className="ml-auto mt-6 w-full max-w-sm space-y-2 text-sm">
+            </div>
+            <div className="ml-auto mt-4 w-full max-w-sm rounded-md border border-zinc-300 p-3 text-sm">
               <div className="flex justify-between">
                 <span>ยอดรวม</span>
                 <span>{formatCurrency(document.subtotal ?? document.amount)}</span>
@@ -236,7 +267,7 @@ export function DocumentPrint({
           </section>
         )}
 
-        {type !== "repair-job" && hasPaymentInfo(company) ? (
+        {showPaymentInfo && hasPaymentInfo(company) ? (
           <section className="border-b border-zinc-300 py-6">
             <h2 className="font-semibold">ช่องทางการชำระเงิน</h2>
             <div className="mt-3 grid gap-3 rounded-md border border-zinc-200 bg-zinc-50 p-4 text-sm md:grid-cols-[auto_1fr]">
@@ -272,9 +303,13 @@ export function DocumentPrint({
           </section>
         ) : null}
 
-        <footer className="mt-12 grid gap-10 md:grid-cols-2">
-          <div className="border-t border-zinc-400 pt-3 text-center text-sm">ผู้จ่ายเงิน</div>
-          <div className="border-t border-zinc-400 pt-3 text-center text-sm">ผู้รับเงิน</div>
+        <footer className="mt-12 grid gap-8" style={{ gridTemplateColumns: `repeat(${signatures.length}, minmax(0, 1fr))` }}>
+          {signatures.map((signature) => (
+            <div className="text-center text-sm" key={signature.label}>
+              <div className="border-t border-zinc-400 pt-3">{signature.label}</div>
+              {signature.date ? <div className="mt-4 text-zinc-600">วันที่ ........../........../..........</div> : null}
+            </div>
+          ))}
         </footer>
       </section>
     </main>

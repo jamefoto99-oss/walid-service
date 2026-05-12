@@ -13,6 +13,8 @@ const billingStatementSchema = z.object({
   issued_at: z.string().trim().min(1, "กรุณาระบุวันที่ออกเอกสาร"),
   due_at: z.string().trim().optional().nullable(),
   notes: z.string().trim().optional().nullable(),
+  show_payment_info: z.boolean().default(false),
+  show_paid_stamp: z.boolean().default(false),
 });
 
 async function currentActorId() {
@@ -35,6 +37,8 @@ export async function createBillingStatement(_: ActionResult | null, formData: F
       issued_at: formData.get("issued_at"),
       due_at: formData.get("due_at") || null,
       notes: formData.get("notes") || null,
+      show_payment_info: formData.get("show_payment_info") === "on",
+      show_paid_stamp: formData.get("show_paid_stamp") === "on",
     });
 
     const invoiceIds = Array.from(
@@ -89,6 +93,8 @@ export async function createBillingStatement(_: ActionResult | null, formData: F
         total,
         status: "issued",
         notes: payload.notes || null,
+        show_payment_info: payload.show_payment_info,
+        show_paid_stamp: payload.show_paid_stamp,
         created_by: actor,
       })
       .select("id,billing_statement_no")

@@ -52,6 +52,11 @@ function schemaForField(field: FieldConfig) {
       .string()
       .trim()
       .transform((value) => value || today());
+  } else if (field.type === "checkbox") {
+    schema = z.preprocess(
+      (value) => value === true || value === "true" || value === "on" || value === "1",
+      z.boolean(),
+    );
   } else if (field.type === "line-items") {
     schema = z.preprocess((value) => {
       if (typeof value !== "string") return value;

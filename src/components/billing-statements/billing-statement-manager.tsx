@@ -173,6 +173,17 @@ export function BillingStatementManager({
             />
           </label>
 
+          <div className="grid gap-3 rounded-md border border-border bg-surface-soft p-3 sm:grid-cols-2">
+            <label className="flex items-start gap-3 text-sm font-semibold">
+              <input className="mt-0.5 h-5 w-5 accent-primary" name="show_payment_info" type="checkbox" />
+              <span>แสดงข้อมูลบัญชีธนาคารบนเอกสาร</span>
+            </label>
+            <label className="flex items-start gap-3 text-sm font-semibold">
+              <input className="mt-0.5 h-5 w-5 accent-primary" name="show_paid_stamp" type="checkbox" />
+              <span>Stamp จ่ายแล้วบนเอกสาร</span>
+            </label>
+          </div>
+
           <div className="rounded-md border border-border">
             <div className="border-b border-border p-3">
               <label>

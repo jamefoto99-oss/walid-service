@@ -13,6 +13,7 @@ export type FieldType =
   | "textarea"
   | "number"
   | "date"
+  | "checkbox"
   | "select"
   | "line-items";
 
