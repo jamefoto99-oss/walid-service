@@ -26,6 +26,7 @@ const TABLES = [
   "invoices",
   "invoice_items",
   "receipts",
+  "receipt_items",
   "billing_statements",
   "billing_statement_items",
   "cash_bills",
@@ -263,6 +264,8 @@ function buildChecks(data) {
   const activePurchaseIds = byId(activePurchases);
   const activeInvoiceIds = byId(activeInvoices);
   const activeReceiptIds = byId(activeReceipts);
+  const invoiceBackedReceipts = activeReceipts.filter((row) => row.invoice_id);
+  const directRepairReceipts = activeReceipts.filter((row) => !row.invoice_id && row.repair_job_id);
   const activeBillingStatementIds = byId(activeBillingStatements);
   const activeCashBillIds = byId(activeCashBills);
   const activeQuotationItems = quotationItems.filter((row) => activeQuotationIds.has(String(row.quotation_id ?? "")));
@@ -412,10 +415,17 @@ function buildChecks(data) {
   );
   assertCheck(
     checks,
-    missingParentRows(activeReceipts, "invoice_id", activeInvoiceIds).length === 0,
+    missingParentRows(invoiceBackedReceipts, "invoice_id", activeInvoiceIds).length === 0,
     "Flow 4",
     "receipts reference existing invoices",
-    `${count(missingParentRows(activeReceipts, "invoice_id", activeInvoiceIds))} orphan rows`,
+    `${count(missingParentRows(invoiceBackedReceipts, "invoice_id", activeInvoiceIds))} orphan rows`,
+  );
+  assertCheck(
+    checks,
+    activeReceipts.every((row) => row.invoice_id || (row.repair_job_id && repairJobIds.has(String(row.repair_job_id)))),
+    "Flow 4",
+    "direct receipts reference repair jobs when no invoice exists",
+    `${count(directRepairReceipts)} direct repair receipts`,
   );
   assertCheck(
     checks,

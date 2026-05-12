@@ -28,6 +28,28 @@ const imagePathSchema = z
   .min(1, "ไม่พบ path รูปภาพ")
   .refine((value) => value.startsWith("repair-jobs/"), "path รูปภาพไม่ถูกต้อง");
 
+const instantBillingSchema = z.object({
+  document_type: z.enum(["receipt", "cash_bill"]),
+  payment_method: z.enum(["cash", "transfer", "qr", "other"]).default("cash"),
+  discount: z.coerce.number().min(0, "ส่วนลดต้องไม่ติดลบ").default(0),
+  show_payment_info: z.preprocess(
+    (value) => value === true || value === "true" || value === "on" || value === "1",
+    z.boolean(),
+  ).default(false),
+  show_paid_stamp: z.preprocess(
+    (value) => value === true || value === "true" || value === "on" || value === "1",
+    z.boolean(),
+  ).default(true),
+  notes: z.string().trim().optional().nullable(),
+});
+
+type InstantBillingResult = ActionResult & {
+  documentId?: string;
+  documentNo?: string;
+  documentType?: "receipts" | "cash-bills";
+  href?: string;
+};
+
 async function logRepairActivity(jobId: string, action: string, metadata: Record<string, unknown>) {
   const supabase = await createSupabaseServerClient();
   if (!supabase) return;
@@ -60,6 +82,28 @@ function refreshRepairJob(jobId: string) {
   revalidatePath(`/repair-jobs/${jobId}`);
   revalidatePath("/repair-jobs");
   revalidatePath("/dashboard");
+}
+
+function repairItemDescription(item: Record<string, unknown>) {
+  return [item.title, item.description].filter(Boolean).join(" - ") || "รายการซ่อม";
+}
+
+function itemTypeFromRepairTitle(title: unknown) {
+  return String(title ?? "").startsWith("อะไหล่:") ? "part" : "labor";
+}
+
+function vehicleLabel(vehicle: Record<string, unknown> | null) {
+  if (!vehicle) return null;
+  return [vehicle.license_plate, vehicle.province, vehicle.brand, vehicle.model, vehicle.color].filter(Boolean).join(" ") || null;
+}
+
+function refreshInstantBilling(jobId: string, documentType: "receipts" | "cash-bills", documentId: string) {
+  refreshRepairJob(jobId);
+  revalidatePath(`/${documentType}`);
+  revalidatePath(`/${documentType}/${documentId}`);
+  revalidatePath(`/print/${documentType}/${documentId}`);
+  revalidatePath("/income");
+  revalidatePath("/reports");
 }
 
 export async function updateRepairJobStatus(
@@ -249,6 +293,210 @@ export async function createQuotationFromRepairJob(jobId: string): Promise<Actio
     return { ok: true, message: `สร้างใบเสนอราคา ${quotation.quotation_no} แล้ว` };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "เกิดข้อผิดพลาด" };
+  }
+}
+
+export async function createInstantRepairJobBill(jobId: string, input: unknown): Promise<InstantBillingResult> {
+  try {
+    await requireModuleAccess("receipts", "write");
+    const supabase = await createSupabaseServerClient();
+    if (!supabase) return { ok: false, error: "ยังไม่ได้ตั้งค่า Supabase" };
+
+    const payload = instantBillingSchema.parse(input);
+    const [{ data: job }, { data: items }, { data: customer }, { data: vehicle }] = await Promise.all([
+      supabase.from("repair_jobs").select("*").eq("id", jobId).is("deleted_at", null).maybeSingle(),
+      supabase
+        .from("repair_job_items")
+        .select("*")
+        .eq("repair_job_id", jobId)
+        .is("deleted_at", null)
+        .order("created_at"),
+      supabase
+        .from("repair_jobs")
+        .select("customers(full_name,phone,address)")
+        .eq("id", jobId)
+        .maybeSingle()
+        .then((result) => ({ data: (result.data?.customers ?? null) as Record<string, unknown> | null })),
+      supabase
+        .from("repair_jobs")
+        .select("vehicles(license_plate,province,brand,model,color)")
+        .eq("id", jobId)
+        .maybeSingle()
+        .then((result) => ({ data: (result.data?.vehicles ?? null) as Record<string, unknown> | null })),
+    ]);
+
+    if (!job) return { ok: false, error: "ไม่พบงานซ่อม" };
+    if (!items?.length) return { ok: false, error: "กรุณาเพิ่มรายการซ่อมก่อนเปิดบิลทันที" };
+
+    const actorId = (await supabase.auth.getUser()).data.user?.id ?? null;
+    const subtotal = items.reduce((sum, item) => sum + toNumber(item.total), 0);
+    const total = Math.max(subtotal - payload.discount, 0);
+    if (total <= 0) return { ok: false, error: "ยอดสุทธิต้องมากกว่า 0" };
+
+    const today = new Date().toISOString().slice(0, 10);
+    const noteText = payload.notes || `สร้างจากงานซ่อม ${job.job_number}`;
+
+    if (payload.document_type === "cash_bill") {
+      const cashBillNo = await nextDocumentNumber("CB");
+      const { data: bill, error } = await supabase
+        .from("cash_bills")
+        .insert({
+          cash_bill_no: cashBillNo,
+          issued_at: today,
+          customer_id: job.customer_id,
+          vehicle_id: job.vehicle_id,
+          repair_job_id: jobId,
+          customer_name: customer?.full_name ?? "ลูกค้าเงินสด",
+          customer_phone: customer?.phone ?? null,
+          customer_address: customer?.address ?? null,
+          vehicle_text: vehicleLabel(vehicle),
+          subtotal,
+          discount: payload.discount,
+          total,
+          payment_method: payload.payment_method,
+          show_payment_info: payload.show_payment_info,
+          show_paid_stamp: payload.show_paid_stamp,
+          notes: noteText,
+          created_by: actorId,
+        })
+        .select("id,cash_bill_no")
+        .single();
+      if (error || !bill) return { ok: false, error: error?.message ?? "ออกบิลเงินสดไม่สำเร็จ" };
+
+      const { error: cashBillItemsError } = await supabase.from("cash_bill_items").insert(
+        items.map((item, index) => ({
+          cash_bill_id: bill.id,
+          item_type: itemTypeFromRepairTitle(item.title),
+          description: repairItemDescription(item),
+          quantity: item.quantity,
+          unit: "รายการ",
+          unit_price: item.labor_price,
+          discount: item.discount,
+          total: item.total,
+          sort_order: index + 1,
+        })),
+      );
+      if (cashBillItemsError) {
+        await supabase.from("cash_bills").delete().eq("id", bill.id);
+        return { ok: false, error: cashBillItemsError.message };
+      }
+
+      await Promise.all([
+        supabase.from("income_records").insert({
+          recorded_at: today,
+          category: "repair_service",
+          description: `บิลเงินสด ${bill.cash_bill_no}`,
+          amount: total,
+          payment_method: payload.payment_method,
+          reference_no: bill.cash_bill_no,
+          cash_bill_id: bill.id,
+          created_by: actorId,
+        }),
+        supabase.from("repair_jobs").update({ status: "delivered", estimated_total: subtotal }).eq("id", jobId),
+        supabase.from("activity_logs").insert({
+          actor_id: actorId,
+          action: "create_cash_bill",
+          table_name: "cash_bills",
+          record_id: bill.id,
+          metadata: { repair_job_id: jobId, cash_bill_no: bill.cash_bill_no, total, instant: true },
+        }),
+      ]);
+
+      await logRepairActivity(jobId, "create_instant_cash_bill", {
+        cash_bill_id: bill.id,
+        cash_bill_no: bill.cash_bill_no,
+        total,
+      });
+      refreshInstantBilling(jobId, "cash-bills", bill.id);
+      return {
+        ok: true,
+        message: `ออกบิลเงินสด ${bill.cash_bill_no} แล้ว`,
+        documentId: bill.id,
+        documentNo: bill.cash_bill_no,
+        documentType: "cash-bills",
+        href: `/print/cash-bills/${bill.id}`,
+      };
+    }
+
+    const receiptNo = await nextDocumentNumber("RC");
+    const { data: receipt, error } = await supabase
+      .from("receipts")
+      .insert({
+        receipt_no: receiptNo,
+        received_at: today,
+        customer_id: job.customer_id,
+        vehicle_id: job.vehicle_id,
+        repair_job_id: jobId,
+        invoice_id: null,
+        subtotal,
+        discount: payload.discount,
+        total,
+        payment_method: payload.payment_method,
+        amount: total,
+        show_payment_info: payload.show_payment_info,
+        show_paid_stamp: payload.show_paid_stamp,
+        notes: noteText,
+        created_by: actorId,
+      })
+      .select("id,receipt_no")
+      .single();
+    if (error || !receipt) return { ok: false, error: error?.message ?? "ออกใบเสร็จไม่สำเร็จ" };
+
+    const { error: receiptItemsError } = await supabase.from("receipt_items").insert(
+      items.map((item, index) => ({
+        receipt_id: receipt.id,
+        item_type: itemTypeFromRepairTitle(item.title),
+        description: repairItemDescription(item),
+        quantity: item.quantity,
+        unit: "รายการ",
+        unit_price: item.labor_price,
+        discount: item.discount,
+        total: item.total,
+        sort_order: index + 1,
+      })),
+    );
+    if (receiptItemsError) {
+      await supabase.from("receipts").delete().eq("id", receipt.id);
+      return { ok: false, error: receiptItemsError.message };
+    }
+
+    await Promise.all([
+      supabase.from("income_records").insert({
+        recorded_at: today,
+        category: "repair_service",
+        description: `ใบเสร็จรับเงิน ${receipt.receipt_no}`,
+        amount: total,
+        payment_method: payload.payment_method,
+        reference_no: receipt.receipt_no,
+        receipt_id: receipt.id,
+        created_by: actorId,
+      }),
+      supabase.from("repair_jobs").update({ status: "delivered", estimated_total: subtotal }).eq("id", jobId),
+      supabase.from("activity_logs").insert({
+        actor_id: actorId,
+        action: "create_receipt",
+        table_name: "receipts",
+        record_id: receipt.id,
+        metadata: { repair_job_id: jobId, receipt_no: receipt.receipt_no, total, instant: true },
+      }),
+    ]);
+
+    await logRepairActivity(jobId, "create_instant_receipt", {
+      receipt_id: receipt.id,
+      receipt_no: receipt.receipt_no,
+      total,
+    });
+    refreshInstantBilling(jobId, "receipts", receipt.id);
+    return {
+      ok: true,
+      message: `ออกใบเสร็จ ${receipt.receipt_no} แล้ว`,
+      documentId: receipt.id,
+      documentNo: receipt.receipt_no,
+      documentType: "receipts",
+      href: `/print/receipts/${receipt.id}`,
+    };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "เปิดบิลทันทีไม่สำเร็จ" };
   }
 }
 

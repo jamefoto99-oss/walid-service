@@ -55,9 +55,13 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
   const { receipt, items, payments, incomeRecords, logs } = detail;
   const customer = nested(receipt, "customers");
   const invoice = nested(receipt, "invoices");
-  const vehicle = nested(invoice, "vehicles");
-  const repairJob = nested(invoice, "repair_jobs");
+  const directVehicle = nested(receipt, "vehicles");
+  const directRepairJob = nested(receipt, "repair_jobs");
+  const vehicle = nested(invoice, "vehicles") ?? directVehicle;
+  const repairJob = nested(invoice, "repair_jobs") ?? directRepairJob;
   const quotation = nested(invoice, "quotations");
+  const vehicleId = invoice?.vehicle_id ?? receipt.vehicle_id;
+  const repairJobId = invoice?.repair_job_id ?? receipt.repair_job_id;
   const writable = canWrite(session.profile.role, "receipts");
   const isVoided = Boolean(receipt.voided_at);
 
@@ -100,8 +104,8 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
         <SummaryCard label="วันที่รับเงิน" value={formatDate(receipt.received_at)} />
         <SummaryCard
           label="สถานะใบแจ้งหนี้"
-          value={invoice ? <Badge value={invoice.payment_status} /> : "-"}
-          hint={invoice ? `ค้างชำระ ${formatCurrency(invoice.balance_due)}` : undefined}
+          value={invoice ? <Badge value={invoice.payment_status} /> : "ออกตรงจากงานซ่อม"}
+          hint={invoice ? `ค้างชำระ ${formatCurrency(invoice.balance_due)}` : "ไม่ผ่านใบแจ้งหนี้"}
         />
       </section>
 
@@ -130,12 +134,16 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
                     {text(invoice.invoice_no)}
                   </Link>
                 ) : (
-                  "-"
+                  "ไม่ผ่านใบแจ้งหนี้"
                 ),
               },
-              { label: "วันที่ออกใบแจ้งหนี้", value: formatDate(invoice?.issued_at) },
-              { label: "วันครบกำหนด", value: formatDate(invoice?.due_at) },
-              { label: "ยอดรวมใบแจ้งหนี้", value: formatCurrency(invoice?.total) },
+              ...(invoice
+                ? [
+                    { label: "วันที่ออกใบแจ้งหนี้", value: formatDate(invoice.issued_at) },
+                    { label: "วันครบกำหนด", value: formatDate(invoice.due_at) },
+                    { label: "ยอดรวมใบแจ้งหนี้", value: formatCurrency(invoice.total) },
+                  ]
+                : []),
               {
                 label: "ใบเสนอราคา",
                 value: quotation ? (
@@ -150,7 +158,7 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
               {
                 label: "งานซ่อม",
                 value: repairJob ? (
-                  <Link className="font-semibold text-primary hover:underline" href={`/repair-jobs/${invoice?.repair_job_id}`}>
+                  <Link className="font-semibold text-primary hover:underline" href={`/repair-jobs/${repairJobId}`}>
                     {text(repairJob.job_number)}
                   </Link>
                 ) : (
@@ -190,7 +198,7 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
               {
                 label: "รถยนต์",
                 value: vehicle ? (
-                  <Link className="font-semibold text-primary hover:underline" href={`/vehicles/${invoice?.vehicle_id}`}>
+                  <Link className="font-semibold text-primary hover:underline" href={`/vehicles/${vehicleId}`}>
                     <Car className="mr-1 inline h-4 w-4" />
                     {text(vehicle.license_plate)} {text(vehicle.brand)} {text(vehicle.model)}
                   </Link>
@@ -220,9 +228,9 @@ export default async function ReceiptDetailPage({ params }: { params: Promise<{ 
 
       <section className="mb-5">
         <DetailTable
-          title="รายการในใบแจ้งหนี้"
+          title={invoice ? "รายการในใบแจ้งหนี้" : "รายการจากงานซ่อม"}
           rows={items}
-          empty="ยังไม่มีรายการในใบแจ้งหนี้"
+          empty={invoice ? "ยังไม่มีรายการในใบแจ้งหนี้" : "ยังไม่มีรายการจากงานซ่อม"}
           columns={[
             {
               header: "รายการ",

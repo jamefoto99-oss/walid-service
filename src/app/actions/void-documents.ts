@@ -68,6 +68,64 @@ export async function voidReceipt(input: unknown): Promise<ActionResult> {
     if (!supabase) return { ok: false, error: "ยังไม่ได้ตั้งค่า Supabase" };
 
     const payload = voidSchema.parse(input);
+    const { data: receipt, error: receiptError } = await supabase
+      .from("receipts")
+      .select("id,receipt_no,invoice_id,repair_job_id,voided_at")
+      .eq("id", payload.id)
+      .is("deleted_at", null)
+      .maybeSingle();
+    if (receiptError || !receipt) return { ok: false, error: "ไม่พบใบเสร็จ" };
+    if (receipt.voided_at) return { ok: false, error: "ใบเสร็จนี้ถูกยกเลิกแล้ว" };
+
+    if (!receipt.invoice_id) {
+      const actorId = (await supabase.auth.getUser()).data.user?.id ?? null;
+      const now = new Date().toISOString();
+      const [receiptResult, incomeResult, jobResult, logResult] = await Promise.all([
+        supabase
+          .from("receipts")
+          .update({
+            voided_at: now,
+            voided_by: actorId,
+            void_reason: payload.reason,
+            updated_at: now,
+          })
+          .eq("id", payload.id),
+        supabase
+          .from("income_records")
+          .update({
+            deleted_at: now,
+            voided_at: now,
+            voided_by: actorId,
+            void_reason: payload.reason,
+            updated_at: now,
+          })
+          .eq("receipt_id", payload.id)
+          .is("deleted_at", null)
+          .is("voided_at", null),
+        receipt.repair_job_id
+          ? supabase.from("repair_jobs").update({ status: "waiting_payment", updated_at: now }).eq("id", receipt.repair_job_id)
+          : Promise.resolve({ error: null }),
+        supabase.from("activity_logs").insert({
+          actor_id: actorId,
+          action: "void_receipt",
+          table_name: "receipts",
+          record_id: payload.id,
+          metadata: {
+            receipt_no: receipt.receipt_no,
+            repair_job_id: receipt.repair_job_id,
+            reason: payload.reason,
+            direct_repair_receipt: true,
+            voided_income_records: "linked_by_receipt_id",
+          },
+        }),
+      ]);
+      const mutationError = receiptResult.error ?? incomeResult.error ?? jobResult.error ?? logResult.error;
+      if (mutationError) return { ok: false, error: mutationError.message };
+
+      refreshInvoicePaths(undefined, payload.id, receipt.repair_job_id);
+      return { ok: true, message: `ยกเลิกใบเสร็จ ${receipt.receipt_no} แล้ว` };
+    }
+
     const result = await callVoidRpc(supabase, "void_receipt_transaction", {
       p_receipt_id: payload.id,
       p_reason: payload.reason,

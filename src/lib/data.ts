@@ -666,15 +666,32 @@ export async function getCustomerDetail(id: string) {
   ]);
 
   const invoiceIds = (invoices.data ?? []).map((invoice) => invoice.id);
-  const receipts = invoiceIds.length
-    ? await supabase
-        .from("receipts")
-        .select("*, invoices(invoice_no,total,balance_due)")
-        .in("invoice_id", invoiceIds)
-        .is("deleted_at", null)
-        .is("voided_at", null)
-        .order("received_at", { ascending: false })
-    : { data: [] };
+  const [invoiceReceipts, directReceipts] = await Promise.all([
+    invoiceIds.length
+      ? supabase
+          .from("receipts")
+          .select("*, invoices(invoice_no,total,balance_due)")
+          .in("invoice_id", invoiceIds)
+          .is("deleted_at", null)
+          .is("voided_at", null)
+          .order("received_at", { ascending: false })
+      : Promise.resolve({ data: [] }),
+    supabase
+      .from("receipts")
+      .select("*, repair_jobs(job_number,status)")
+      .eq("customer_id", id)
+      .is("invoice_id", null)
+      .is("deleted_at", null)
+      .is("voided_at", null)
+      .order("received_at", { ascending: false }),
+  ]);
+  const receiptMap = new Map<string, Record<string, unknown>>();
+  for (const receipt of [...(invoiceReceipts.data ?? []), ...(directReceipts.data ?? [])] as Record<string, unknown>[]) {
+    receiptMap.set(String(receipt.id), receipt);
+  }
+  const receipts = Array.from(receiptMap.values()).sort((a, b) =>
+    String(b.received_at ?? b.created_at ?? "").localeCompare(String(a.received_at ?? a.created_at ?? "")),
+  );
 
   return {
     setupRequired: false,
@@ -684,7 +701,7 @@ export async function getCustomerDetail(id: string) {
       jobs: (jobs.data ?? []) as Record<string, unknown>[],
       quotations: (quotations.data ?? []) as Record<string, unknown>[],
       invoices: (invoices.data ?? []) as Record<string, unknown>[],
-      receipts: (receipts.data ?? []) as Record<string, unknown>[],
+      receipts,
     },
   };
 }
@@ -724,15 +741,32 @@ export async function getVehicleDetail(id: string) {
   ]);
 
   const invoiceIds = (invoices.data ?? []).map((invoice) => invoice.id);
-  const receipts = invoiceIds.length
-    ? await supabase
-        .from("receipts")
-        .select("*, invoices(invoice_no,total,balance_due)")
-        .in("invoice_id", invoiceIds)
-        .is("deleted_at", null)
-        .is("voided_at", null)
-        .order("received_at", { ascending: false })
-    : { data: [] };
+  const [invoiceReceipts, directReceipts] = await Promise.all([
+    invoiceIds.length
+      ? supabase
+          .from("receipts")
+          .select("*, invoices(invoice_no,total,balance_due)")
+          .in("invoice_id", invoiceIds)
+          .is("deleted_at", null)
+          .is("voided_at", null)
+          .order("received_at", { ascending: false })
+      : Promise.resolve({ data: [] }),
+    supabase
+      .from("receipts")
+      .select("*, repair_jobs(job_number,status)")
+      .eq("vehicle_id", id)
+      .is("invoice_id", null)
+      .is("deleted_at", null)
+      .is("voided_at", null)
+      .order("received_at", { ascending: false }),
+  ]);
+  const receiptMap = new Map<string, Record<string, unknown>>();
+  for (const receipt of [...(invoiceReceipts.data ?? []), ...(directReceipts.data ?? [])] as Record<string, unknown>[]) {
+    receiptMap.set(String(receipt.id), receipt);
+  }
+  const receipts = Array.from(receiptMap.values()).sort((a, b) =>
+    String(b.received_at ?? b.created_at ?? "").localeCompare(String(a.received_at ?? a.created_at ?? "")),
+  );
 
   return {
     setupRequired: false,
@@ -741,7 +775,7 @@ export async function getVehicleDetail(id: string) {
       jobs: (jobs.data ?? []) as Record<string, unknown>[],
       quotations: (quotations.data ?? []) as Record<string, unknown>[],
       invoices: (invoices.data ?? []) as Record<string, unknown>[],
-      receipts: (receipts.data ?? []) as Record<string, unknown>[],
+      receipts,
     },
   };
 }
@@ -872,7 +906,7 @@ export async function getReceiptDetail(id: string) {
   const { data: receipt, error } = await supabase
     .from("receipts")
     .select(
-      "*, customers(full_name,phone,line_id,address), invoices(invoice_no,issued_at,due_at,total,paid_amount,balance_due,payment_status,vehicle_id,repair_job_id,quotation_id,notes, vehicles(license_plate,province,brand,model,year,color,mileage), repair_jobs(job_number,status,reported_problem), quotations(quotation_no,status,total))",
+      "*, customers(full_name,phone,line_id,address), vehicles(license_plate,province,brand,model,year,color,mileage), repair_jobs(job_number,status,reported_problem), invoices(invoice_no,issued_at,due_at,total,paid_amount,balance_due,payment_status,vehicle_id,repair_job_id,quotation_id,notes, vehicles(license_plate,province,brand,model,year,color,mileage), repair_jobs(job_number,status,reported_problem), quotations(quotation_no,status,total))",
     )
     .eq("id", id)
     .is("deleted_at", null)
@@ -880,13 +914,23 @@ export async function getReceiptDetail(id: string) {
 
   if (error || !receipt) return { setupRequired: false, detail: null };
 
-  const invoiceId = String((receipt as Record<string, unknown>).invoice_id);
+  const receiptRow = receipt as Record<string, unknown>;
+  const invoiceId = receiptRow.invoice_id ? String(receiptRow.invoice_id) : "";
+  const repairJobId = receiptRow.repair_job_id ? String(receiptRow.repair_job_id) : "";
   const [items, payments, incomeRecords, receiptLogs, invoiceLogs] = await Promise.all([
-    supabase
-      .from("invoice_items")
-      .select("*, parts(part_code,name,unit)")
-      .eq("invoice_id", invoiceId)
-      .order("sort_order"),
+    invoiceId
+      ? supabase
+          .from("invoice_items")
+          .select("*, parts(part_code,name,unit)")
+          .eq("invoice_id", invoiceId)
+          .order("sort_order")
+      : repairJobId
+        ? supabase
+            .from("receipt_items")
+            .select("*")
+            .eq("receipt_id", id)
+            .order("sort_order")
+        : Promise.resolve({ data: [] }),
     supabase
       .from("payment_records")
       .select("*")
@@ -906,13 +950,15 @@ export async function getReceiptDetail(id: string) {
       .eq("record_id", id)
       .order("created_at", { ascending: false })
       .limit(20),
-    supabase
-      .from("activity_logs")
-      .select("*, profiles(full_name,email,role)")
-      .eq("table_name", "invoices")
-      .eq("record_id", invoiceId)
-      .order("created_at", { ascending: false })
-      .limit(20),
+    invoiceId
+      ? supabase
+          .from("activity_logs")
+          .select("*, profiles(full_name,email,role)")
+          .eq("table_name", "invoices")
+          .eq("record_id", invoiceId)
+          .order("created_at", { ascending: false })
+          .limit(20)
+      : Promise.resolve({ data: [] }),
   ]);
 
   const relatedInvoiceLogs = ((invoiceLogs.data ?? []) as Record<string, unknown>[]).filter((log) => {
@@ -1013,25 +1059,26 @@ export async function getDocumentForPrint(type: string, id: string) {
   if (!document) return null;
 
   const settings = await getLatestCompanySettings(supabase);
+  const receiptInvoiceId = type === "receipts" ? (document as Record<string, unknown>).invoice_id : null;
   const receiptInvoice =
-    type === "receipts" && (document as Record<string, unknown>).invoice_id
+    type === "receipts" && receiptInvoiceId
       ? await supabase
           .from("invoices")
           .select("*")
-          .eq("id", String((document as Record<string, unknown>).invoice_id))
+          .eq("id", String(receiptInvoiceId))
           .maybeSingle()
       : { data: null };
   const invoiceSource = (receiptInvoice.data as Record<string, unknown> | null) ?? null;
   const customerId = (document as Record<string, unknown>).customer_id ?? invoiceSource?.customer_id;
   const vehicleId = (document as Record<string, unknown>).vehicle_id ?? invoiceSource?.vehicle_id;
-  const invoiceId = type === "receipts" ? (document as Record<string, unknown>).invoice_id : id;
-  const [customer, vehicle, quotationItems, invoiceItems, cashBillItems, billingStatementItems] = await Promise.all([
+  const invoiceId = type === "receipts" ? receiptInvoiceId : id;
+  const [customer, vehicle, quotationItems, invoiceItems, cashBillItems, billingStatementItems, receiptItems] = await Promise.all([
     customerId ? supabase.from("customers").select("*").eq("id", String(customerId)).maybeSingle() : Promise.resolve({ data: null }),
     vehicleId ? supabase.from("vehicles").select("*").eq("id", String(vehicleId)).maybeSingle() : Promise.resolve({ data: null }),
     type === "quotations"
       ? supabase.from("quotation_items").select("*").eq("quotation_id", id).order("sort_order")
       : Promise.resolve({ data: [] }),
-    type === "invoices" || type === "receipts"
+    type === "invoices" || (type === "receipts" && invoiceId)
       ? supabase.from("invoice_items").select("*").eq("invoice_id", String(invoiceId)).order("sort_order")
       : Promise.resolve({ data: [] }),
     type === "cash-bills"
@@ -1039,6 +1086,13 @@ export async function getDocumentForPrint(type: string, id: string) {
       : Promise.resolve({ data: [] }),
     type === "billing-statements"
       ? supabase.from("billing_statement_items").select("*").eq("billing_statement_id", id).order("sort_order")
+      : Promise.resolve({ data: [] }),
+    type === "receipts" && !invoiceId
+      ? supabase
+          .from("receipt_items")
+          .select("*")
+          .eq("receipt_id", id)
+          .order("sort_order")
       : Promise.resolve({ data: [] }),
   ]);
   const manualCustomer: Record<string, unknown> | null =
@@ -1065,13 +1119,15 @@ export async function getDocumentForPrint(type: string, id: string) {
     items:
       type === "quotations"
         ? quotationItems.data ?? []
-        : type === "invoices" || type === "receipts"
+        : type === "invoices" || (type === "receipts" && invoiceId)
           ? invoiceItems.data ?? []
-          : type === "cash-bills"
-            ? cashBillItems.data ?? []
-            : type === "billing-statements"
-              ? billingStatementItems.data ?? []
-              : [],
+          : type === "receipts"
+            ? receiptItems.data ?? []
+            : type === "cash-bills"
+              ? cashBillItems.data ?? []
+              : type === "billing-statements"
+                ? billingStatementItems.data ?? []
+                : [],
   };
 }
 
@@ -1088,7 +1144,7 @@ export async function getRepairJobDetail(id: string) {
 
   if (error || !job) return { setupRequired: false, detail: null };
 
-  const [customer, vehicle, items, movements, logs, quotations, invoices, parts] = await Promise.all([
+  const [customer, vehicle, items, movements, logs, quotations, invoices, cashBills, parts] = await Promise.all([
     supabase.from("customers").select("*").eq("id", job.customer_id).maybeSingle(),
     supabase.from("vehicles").select("*").eq("id", job.vehicle_id).maybeSingle(),
     supabase
@@ -1121,6 +1177,12 @@ export async function getRepairJobDetail(id: string) {
       .is("deleted_at", null)
       .order("created_at", { ascending: false }),
     supabase
+      .from("cash_bills")
+      .select("*")
+      .eq("repair_job_id", id)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false }),
+    supabase
       .from("parts")
       .select("id,part_code,name,sale_price,quantity_on_hand,unit")
       .is("deleted_at", null)
@@ -1128,15 +1190,32 @@ export async function getRepairJobDetail(id: string) {
   ]);
 
   const invoiceIds = (invoices.data ?? []).map((invoice) => invoice.id);
-  const receipts = invoiceIds.length
-    ? await supabase
-        .from("receipts")
-        .select("*")
-        .in("invoice_id", invoiceIds)
-        .is("deleted_at", null)
-        .is("voided_at", null)
-        .order("created_at", { ascending: false })
-    : { data: [] };
+  const [invoiceReceipts, directReceipts] = await Promise.all([
+    invoiceIds.length
+      ? supabase
+          .from("receipts")
+          .select("*")
+          .in("invoice_id", invoiceIds)
+          .is("deleted_at", null)
+          .is("voided_at", null)
+          .order("created_at", { ascending: false })
+      : Promise.resolve({ data: [] }),
+    supabase
+      .from("receipts")
+      .select("*")
+      .eq("repair_job_id", id)
+      .is("invoice_id", null)
+      .is("deleted_at", null)
+      .is("voided_at", null)
+      .order("created_at", { ascending: false }),
+  ]);
+  const receiptMap = new Map<string, Record<string, unknown>>();
+  for (const receipt of [...(invoiceReceipts.data ?? []), ...(directReceipts.data ?? [])] as Record<string, unknown>[]) {
+    receiptMap.set(String(receipt.id), receipt);
+  }
+  const receipts = Array.from(receiptMap.values()).sort((a, b) =>
+    String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")),
+  );
 
   const imagePaths = Array.isArray(job.images) ? (job.images.filter(Boolean) as string[]) : [];
   const imageUrls = await Promise.all(
@@ -1158,7 +1237,8 @@ export async function getRepairJobDetail(id: string) {
       logs: (logs.data ?? []) as Record<string, unknown>[],
       quotations: (quotations.data ?? []) as Record<string, unknown>[],
       invoices: (invoices.data ?? []) as Record<string, unknown>[],
-      receipts: (receipts.data ?? []) as Record<string, unknown>[],
+      receipts,
+      cashBills: (cashBills.data ?? []) as Record<string, unknown>[],
       parts: (parts.data ?? []) as Record<string, unknown>[],
       imageUrls: imageUrls.filter((image) => image.url),
     },

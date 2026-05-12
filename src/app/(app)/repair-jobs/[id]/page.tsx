@@ -54,7 +54,7 @@ export default async function RepairJobDetailPage({ params }: { params: Promise<
   if (setupRequired) return <SetupRequired />;
   if (!detail) notFound();
 
-  const { job, customer, vehicle, items, movements, logs, quotations, invoices, receipts, parts, imageUrls } = detail;
+  const { job, customer, vehicle, items, movements, logs, quotations, invoices, receipts, cashBills, parts, imageUrls } = detail;
   const totalItems = items.reduce((sum, item) => sum + Number(item.total ?? 0), 0);
 
   return (
@@ -214,10 +214,11 @@ export default async function RepairJobDetailPage({ params }: { params: Promise<
         </div>
       </section>
 
-      <section className="mb-5 grid gap-5 xl:grid-cols-3">
+      <section className="mb-5 grid gap-5 xl:grid-cols-4">
         <DocumentPanel title="ใบเสนอราคา" icon={FileText} rows={quotations} numberKey="quotation_no" amountKey="total" hrefPrefix="/quotations" />
         <DocumentPanel title="ใบแจ้งหนี้" icon={ReceiptText} rows={invoices} numberKey="invoice_no" amountKey="balance_due" hrefPrefix="/invoices" />
         <DocumentPanel title="ใบเสร็จรับเงิน" icon={ReceiptText} rows={receipts} numberKey="receipt_no" amountKey="amount" hrefPrefix="/receipts" />
+        <DocumentPanel title="บิลเงินสด" icon={ReceiptText} rows={cashBills} numberKey="cash_bill_no" amountKey="total" hrefPrefix="/print/cash-bills" />
       </section>
 
       <section className="rounded-lg border border-border bg-surface p-4 shadow-sm">

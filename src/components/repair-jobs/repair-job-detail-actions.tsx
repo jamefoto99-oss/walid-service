@@ -1,12 +1,13 @@
 "use client";
 
-import { FileText, MessageSquarePlus, PackageMinus, Plus, RefreshCcw } from "lucide-react";
+import { BadgeDollarSign, FileText, MessageSquarePlus, PackageMinus, Plus, RefreshCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
   addRepairJobLaborItem,
   addRepairJobNote,
+  createInstantRepairJobBill,
   consumeRepairJobPart,
   createQuotationFromRepairJob,
   updateRepairJobStatus,
@@ -50,14 +51,24 @@ export function RepairJobDetailActions({
   });
   const [partUsage, setPartUsage] = useState({ part_id: "", quantity: "1", discount: "0" });
   const [timelineNote, setTimelineNote] = useState("");
+  const [instantBill, setInstantBill] = useState({
+    payment_method: "cash",
+    discount: "0",
+    notes: "",
+    show_payment_info: false,
+    show_paid_stamp: true,
+  });
   const canUseStock = financeRoles.includes(role);
 
-  function run(action: () => Promise<{ ok: boolean; message?: string; error?: string }>, onSuccess?: () => void) {
+  function run(
+    action: () => Promise<{ ok: boolean; message?: string; error?: string; href?: string }>,
+    onSuccess?: (result: { href?: string }) => void,
+  ) {
     startTransition(async () => {
       const result = await action();
       if (result.ok) {
         toast.success(result.message ?? "บันทึกสำเร็จ");
-        onSuccess?.();
+        onSuccess?.(result);
         router.refresh();
       } else {
         toast.error(result.error ?? "ทำรายการไม่สำเร็จ");
@@ -260,6 +271,119 @@ export function RepairJobDetailActions({
             Role นี้อัปเดตงานซ่อมได้ แต่การตัดสต๊อกอะไหล่ต้องใช้สิทธิ์ Owner, Manager หรือ Accountant
           </p>
         )}
+      </section>
+
+      <section className="rounded-lg border border-border bg-surface p-4 shadow-sm xl:col-span-2">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="mb-1 flex items-center gap-2">
+              <BadgeDollarSign className="h-4 w-4 text-primary" />
+              <h2 className="font-semibold">เปิดบิลทันที</h2>
+            </div>
+            <p className="text-sm text-muted">
+              ใช้กรณีลูกค้าชำระเงินเลย ไม่ต้องสร้างใบเสนอราคาและไม่ต้องออกใบแจ้งหนี้ ระบบจะดึงรายการซ่อมในงานนี้ไปออกเอกสารให้ทันที
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              disabled={isPending || !financeRoles.includes(role)}
+              onClick={() =>
+                run(
+                  () =>
+                    createInstantRepairJobBill(jobId, {
+                      ...instantBill,
+                      document_type: "receipt",
+                      discount: instantBill.discount,
+                    }),
+                  (result) => {
+                    if (result.href) router.push(result.href);
+                  },
+                )
+              }
+            >
+              เปิดใบเสร็จรับเงิน
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={isPending || !financeRoles.includes(role)}
+              onClick={() =>
+                run(
+                  () =>
+                    createInstantRepairJobBill(jobId, {
+                      ...instantBill,
+                      document_type: "cash_bill",
+                      discount: instantBill.discount,
+                    }),
+                  (result) => {
+                    if (result.href) router.push(result.href);
+                  },
+                )
+              }
+            >
+              เปิดบิลเงินสด
+            </Button>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-[180px_160px_1fr]">
+          <label>
+            <span className="text-sm font-semibold">ช่องทางชำระเงิน</span>
+            <select
+              className="mt-1 h-11 w-full rounded-md border border-border bg-white px-3 text-sm outline-none focus:border-primary"
+              value={instantBill.payment_method}
+              onChange={(event) => setInstantBill((value) => ({ ...value, payment_method: event.target.value }))}
+            >
+              <option value="cash">เงินสด</option>
+              <option value="transfer">โอนเงิน</option>
+              <option value="qr">QR Payment</option>
+              <option value="other">อื่น ๆ</option>
+            </select>
+          </label>
+          <label>
+            <span className="text-sm font-semibold">ส่วนลดรวม</span>
+            <input
+              className="mt-1 h-11 w-full rounded-md border border-border bg-white px-3 text-sm outline-none focus:border-primary"
+              min="0"
+              step="0.01"
+              type="number"
+              value={instantBill.discount}
+              onChange={(event) => setInstantBill((value) => ({ ...value, discount: event.target.value }))}
+            />
+          </label>
+          <label>
+            <span className="text-sm font-semibold">หมายเหตุบนเอกสาร</span>
+            <input
+              className="mt-1 h-11 w-full rounded-md border border-border bg-white px-3 text-sm outline-none focus:border-primary"
+              value={instantBill.notes}
+              onChange={(event) => setInstantBill((value) => ({ ...value, notes: event.target.value }))}
+              placeholder="เช่น รับชำระงานซ่อมด่วน"
+            />
+          </label>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-4 text-sm">
+          <label className="inline-flex items-center gap-2">
+            <input
+              className="h-4 w-4 rounded border-border"
+              checked={instantBill.show_payment_info}
+              onChange={(event) => setInstantBill((value) => ({ ...value, show_payment_info: event.target.checked }))}
+              type="checkbox"
+            />
+            แสดงข้อมูลบัญชีธนาคาร
+          </label>
+          <label className="inline-flex items-center gap-2">
+            <input
+              className="h-4 w-4 rounded border-border"
+              checked={instantBill.show_paid_stamp}
+              onChange={(event) => setInstantBill((value) => ({ ...value, show_paid_stamp: event.target.checked }))}
+              type="checkbox"
+            />
+            Stamp จ่ายแล้ว
+          </label>
+        </div>
+        {!financeRoles.includes(role) ? (
+          <p className="mt-3 rounded-md bg-surface-soft p-3 text-sm text-muted">
+            การเปิดบิลทันทีต้องใช้สิทธิ์ Owner, Manager หรือ Accountant
+          </p>
+        ) : null}
       </section>
 
       <section className="rounded-lg border border-border bg-surface p-4 shadow-sm xl:col-span-2">

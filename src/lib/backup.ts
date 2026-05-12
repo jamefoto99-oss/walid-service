@@ -26,6 +26,7 @@ export const backupDatasets = [
   { key: "invoices", table: "invoices", label: "ใบแจ้งหนี้", category: "documents" },
   { key: "invoice_items", table: "invoice_items", label: "รายการใบแจ้งหนี้", category: "documents" },
   { key: "receipts", table: "receipts", label: "ใบเสร็จรับเงิน", category: "documents" },
+  { key: "receipt_items", table: "receipt_items", label: "รายการใบเสร็จรับเงิน", category: "documents" },
   { key: "billing_statements", table: "billing_statements", label: "ใบวางบิล", category: "documents" },
   { key: "billing_statement_items", table: "billing_statement_items", label: "รายการใบวางบิล", category: "documents" },
   { key: "cash_bills", table: "cash_bills", label: "บิลเงินสด", category: "documents" },
