@@ -9,14 +9,16 @@ import { Button } from "../ui/button";
 
 const defaultUnit = "ชิ้น";
 
-const blankItem: LineItemInput = {
-  item_type: "labor",
-  description: "",
-  quantity: 1,
-  unit: defaultUnit,
-  unit_price: 0,
-  discount: 0,
-};
+function blankItem(itemType: LineItemInput["item_type"] = "labor"): LineItemInput {
+  return {
+    item_type: itemType,
+    description: "",
+    quantity: 1,
+    unit: defaultUnit,
+    unit_price: 0,
+    discount: 0,
+  };
+}
 
 const inputClass =
   "mt-1 h-11 w-full rounded-md border border-border bg-white px-3 text-sm outline-none focus:border-primary";
@@ -29,10 +31,12 @@ export function LineItemsField({
   items,
   onChange,
   partOptions,
+  defaultItemType = "labor",
 }: {
   items: LineItemInput[];
   onChange: (items: LineItemInput[]) => void;
   partOptions: FieldOption[];
+  defaultItemType?: LineItemInput["item_type"];
 }) {
   const unitListId = "line-item-unit-options";
 
@@ -42,16 +46,17 @@ export function LineItemsField({
 
   function selectPart(index: number, partId: string, label?: string) {
     const part = partOptions.find((option) => option.value === partId);
-    const currentItem = items[index];
     update(index, {
+      item_type: "part",
       part_id: partId || null,
-      description: currentItem.description || (partId ? label || part?.label || "" : ""),
-      unit: String(partId ? part?.meta?.unit ?? currentItem.unit ?? defaultUnit : currentItem.unit ?? defaultUnit),
+      description: partId ? String(part?.meta?.name ?? label ?? part?.label ?? "") : items[index]?.description ?? "",
+      unit: String(partId ? part?.meta?.unit ?? defaultUnit : items[index]?.unit ?? defaultUnit),
+      unit_price: partId ? toNumber(part?.meta?.sale_price) : items[index]?.unit_price ?? 0,
     });
   }
 
   function remove(index: number) {
-    onChange(items.length <= 1 ? [{ ...blankItem }] : items.filter((_, itemIndex) => itemIndex !== index));
+    onChange(items.length <= 1 ? [blankItem(defaultItemType)] : items.filter((_, itemIndex) => itemIndex !== index));
   }
 
   const subtotal = items.reduce((sum, item) => sum + itemTotal(item), 0);
@@ -63,7 +68,7 @@ export function LineItemsField({
           <p className="text-sm font-semibold">รายการค่าแรง / อะไหล่</p>
           <p className="text-xs text-muted">พิมพ์รายละเอียดเองได้ หรือค้นหาอะไหล่จากสต๊อกเพื่อดึงหน่วยนับมาเติมอัตโนมัติ</p>
         </div>
-        <Button type="button" variant="secondary" className="h-10" onClick={() => onChange([...items, { ...blankItem }])}>
+        <Button type="button" variant="secondary" className="h-10" onClick={() => onChange([...items, blankItem(defaultItemType)])}>
           <Plus className="h-4 w-4" />
           เพิ่มรายการ
         </Button>

@@ -45,7 +45,7 @@ export async function getReferenceData(): Promise<ReferenceData> {
     supabase.from("customers").select("id,full_name,phone").is("deleted_at", null).order("created_at", { ascending: false }),
     supabase.from("vehicles").select("id,license_plate,brand,model").is("deleted_at", null).order("created_at", { ascending: false }),
     supabase.from("repair_jobs").select("id,job_number,status").is("deleted_at", null).order("created_at", { ascending: false }),
-    supabase.from("parts").select("id,part_code,name,quantity_on_hand,unit").is("deleted_at", null).order("created_at", { ascending: false }),
+    supabase.from("parts").select("id,part_code,name,sale_price,quantity_on_hand,unit").is("deleted_at", null).order("created_at", { ascending: false }),
     supabase.from("part_categories").select("id,name").order("created_at", { ascending: false }),
     supabase.from("suppliers").select("id,name").is("deleted_at", null).order("created_at", { ascending: false }),
     supabase.from("quotations").select("id,quotation_no,total,status").is("deleted_at", null).neq("status", "cancelled").order("created_at", { ascending: false }),
@@ -64,7 +64,13 @@ export async function getReferenceData(): Promise<ReferenceData> {
     vehicles: (vehicles.data ?? []).map((row) => option(`${row.license_plate} ${row.brand ?? ""} ${row.model ?? ""}`, row.id)),
     repairJobs: (repairJobs.data ?? []).map((row) => option(`${row.job_number} - ${row.status}`, row.id)),
     parts: (parts.data ?? []).map((row) =>
-      option(`${row.part_code} ${row.name} (เหลือ ${row.quantity_on_hand} ${row.unit ?? "ชิ้น"})`, row.id, { unit: row.unit ?? "ชิ้น" }),
+      option(`${row.part_code} ${row.name} (เหลือ ${row.quantity_on_hand} ${row.unit ?? "ชิ้น"})`, row.id, {
+        name: row.name,
+        part_code: row.part_code,
+        quantity_on_hand: toNumber(row.quantity_on_hand),
+        sale_price: toNumber(row.sale_price),
+        unit: row.unit ?? "ชิ้น",
+      }),
     ),
     partCategories: (partCategories.data ?? []).map((row) => option(row.name, row.id)),
     suppliers: (suppliers.data ?? []).map((row) => option(row.name, row.id)),

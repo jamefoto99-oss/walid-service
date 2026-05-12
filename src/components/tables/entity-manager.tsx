@@ -93,18 +93,21 @@ function defaultValue(field: FieldConfig, row?: Record<string, unknown>, initial
   return "";
 }
 
-const defaultLineItem: LineItemInput = {
-  item_type: "labor",
-  description: "",
-  quantity: 1,
-  unit: "ชิ้น",
-  unit_price: 0,
-  discount: 0,
-};
+function defaultLineItem(moduleKey?: string): LineItemInput {
+  return {
+    item_type: moduleKey === "cash-bills" ? "part" : "labor",
+    description: "",
+    quantity: 1,
+    unit: "ชิ้น",
+    unit_price: 0,
+    discount: 0,
+  };
+}
 
-function lineItemsFromRow(row?: Record<string, unknown>): LineItemInput[] {
+function lineItemsFromRow(row?: Record<string, unknown>, moduleKey?: string): LineItemInput[] {
   const rawItems = row?.cash_bill_items ?? row?.items;
   const source = Array.isArray(rawItems) ? rawItems : [];
+  const fallbackItem = defaultLineItem(moduleKey);
   const items = source.map((item) => {
     const record = item as Record<string, unknown>;
     const rawType = String(record.item_type ?? "labor");
@@ -115,14 +118,14 @@ function lineItemsFromRow(row?: Record<string, unknown>): LineItemInput[] {
       item_type: itemType,
       description: String(record.description ?? ""),
       quantity: toNumber(record.quantity) || 1,
-      unit: String(record.unit ?? defaultLineItem.unit),
+      unit: String(record.unit ?? fallbackItem.unit),
       unit_price: toNumber(record.unit_price),
       discount: toNumber(record.discount),
       part_id: record.part_id ? String(record.part_id) : null,
     };
   });
 
-  return items.length ? items : [{ ...defaultLineItem }];
+  return items.length ? items : [fallbackItem];
 }
 
 function FieldControl({
@@ -391,7 +394,7 @@ function EntityFormDialog({
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
-  const [items, setItems] = useState<LineItemInput[]>(() => lineItemsFromRow(row));
+  const [items, setItems] = useState<LineItemInput[]>(() => lineItemsFromRow(row, config.key));
   const schema = useMemo(() => buildModuleSchema(config), [config]);
   const form = useForm<Record<string, unknown>>({
     resolver: zodResolver(schema),
@@ -445,7 +448,12 @@ function EntityFormDialog({
               return (
                 <div className="md:col-span-2" key={field.name}>
                   <input type="hidden" value={JSON.stringify(items)} {...form.register(field.name)} />
-                  <LineItemsField items={items} onChange={setItems} partOptions={references.parts} />
+                  <LineItemsField
+                    defaultItemType={config.key === "cash-bills" ? "part" : "labor"}
+                    items={items}
+                    onChange={setItems}
+                    partOptions={references.parts}
+                  />
                   {form.formState.errors[field.name] ? (
                     <p className="mt-1 text-sm text-danger">{String(form.formState.errors[field.name]?.message)}</p>
                   ) : null}
