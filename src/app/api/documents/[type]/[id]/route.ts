@@ -1,7 +1,7 @@
 import path from "node:path";
 import { NextResponse } from "next/server";
 import pdfMake from "pdfmake";
-import type { Content, ContentText, TDocumentDefinitions } from "pdfmake/interfaces";
+import type { Content, ContentTable, ContentText, TableLayout, TDocumentDefinitions } from "pdfmake/interfaces";
 import { financeRoles } from "@/lib/constants";
 import { getSessionProfile } from "@/lib/auth";
 import { getDocumentForPrint } from "@/lib/data";
@@ -117,6 +117,43 @@ function formatPdfCurrency(value: unknown) {
   })} บาท`;
 }
 
+function tableColumnCount(node: ContentTable) {
+  return node.table.body[0]?.length ?? 0;
+}
+
+const boxLayout: TableLayout = {
+  hLineColor: "#d4d4d8",
+  vLineColor: "#d4d4d8",
+  paddingTop: () => 8,
+  paddingBottom: () => 8,
+  paddingLeft: () => 8,
+  paddingRight: () => 8,
+};
+
+const framedTableLayout: TableLayout = {
+  hLineColor: "#d4d4d8",
+  vLineColor: "#d4d4d8",
+  hLineWidth: (index, node) =>
+    index === 0 || index === 1 || index === node.table.body.length ? 1 : 0.5,
+  vLineWidth: (index, node) => (index === 0 || index === tableColumnCount(node) ? 1 : 0),
+  paddingTop: () => 8,
+  paddingBottom: () => 8,
+  paddingLeft: () => 6,
+  paddingRight: () => 6,
+};
+
+const summaryTableLayout: TableLayout = {
+  hLineColor: "#d4d4d8",
+  vLineColor: "#d4d4d8",
+  hLineWidth: (index, node) =>
+    index === 0 || index === node.table.body.length || index === node.table.body.length - 1 ? 1 : 0,
+  vLineWidth: (index, node) => (index === 0 || index === tableColumnCount(node) ? 1 : 0),
+  paddingTop: () => 5,
+  paddingBottom: () => 5,
+  paddingLeft: () => 8,
+  paddingRight: () => 8,
+};
+
 async function logoImageDataUrl(value: unknown) {
   if (!value) return null;
   const url = String(value);
@@ -192,26 +229,35 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
         ? [
             {
               table: {
-                widths: [26, "*", 62, 62, 70, 70, 70],
+                widths: [24, "*", 58, 58, 66, 66, 66],
                 body: [
-                  ["ลำดับ", "ใบแจ้งหนี้", "วันที่ออก", "ครบกำหนด", "ยอดรวม", "ชำระแล้ว", "ยอดค้าง"],
+                  [
+                    pdfText("ลำดับ", { alignment: "center", bold: true }),
+                    pdfText("ใบแจ้งหนี้", { bold: true }),
+                    pdfText("วันที่ออก", { bold: true }),
+                    pdfText("ครบกำหนด", { bold: true }),
+                    pdfText("ยอดรวม", { alignment: "right", bold: true }),
+                    pdfText("ชำระแล้ว", { alignment: "right", bold: true }),
+                    pdfText("ยอดค้าง", { alignment: "right", bold: true }),
+                  ],
                   ...items.map((item, index) => [
-                    pdfText(index + 1, { alignment: "center" }),
-                    pdfText(item.invoice_no ?? "-"),
-                    pdfText(formatPdfDate(item.issued_at)),
-                    pdfText(formatPdfDate(item.due_at)),
-                    pdfText(formatPdfCurrency(item.total), { alignment: "right" }),
-                    pdfText(formatPdfCurrency(item.paid_amount), { alignment: "right" }),
-                    pdfText(formatPdfCurrency(item.balance_due), { bold: true, alignment: "right" }),
+                    pdfText(index + 1, { alignment: "center", fontSize: 9 }),
+                    pdfText(item.invoice_no ?? "-", { fontSize: 9 }),
+                    pdfText(formatPdfDate(item.issued_at), { fontSize: 9 }),
+                    pdfText(formatPdfDate(item.due_at), { fontSize: 9 }),
+                    pdfText(formatPdfCurrency(item.total), { alignment: "right", fontSize: 9 }),
+                    pdfText(formatPdfCurrency(item.paid_amount), { alignment: "right", fontSize: 9 }),
+                    pdfText(formatPdfCurrency(item.balance_due), { bold: true, alignment: "right", fontSize: 9 }),
                   ]),
                 ],
               },
-              layout: "lightHorizontalLines",
+              layout: framedTableLayout,
               margin: [0, 10, 0, 12],
             },
             {
+              margin: [0, 12, 0, 0],
               columns: [
-                { text: "" },
+                { width: "*", text: "" },
                 {
                   width: 220,
                   table: {
@@ -224,7 +270,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
                       ],
                     ],
                   },
-                  layout: "lightHorizontalLines",
+                  layout: summaryTableLayout,
                 },
               ],
             },
@@ -232,26 +278,35 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
       : [
           {
             table: {
-              widths: [26, "*", 38, 40, 65, 65, 75],
+              widths: [24, "*", 28, 32, 58, 58, 62],
               body: [
-                ["ลำดับ", "รายการ", "จำนวน", "หน่วย", "ราคา", "ส่วนลด", "รวม"],
+                [
+                  pdfText("ลำดับ", { alignment: "center", bold: true }),
+                  pdfText("รายการ", { bold: true }),
+                  pdfText("จำนวน", { alignment: "right", bold: true }),
+                  pdfText("หน่วย", { alignment: "right", bold: true }),
+                  pdfText("ราคา", { alignment: "right", bold: true }),
+                  pdfText("ส่วนลด", { alignment: "right", bold: true }),
+                  pdfText("รวม", { alignment: "right", bold: true }),
+                ],
                 ...items.map((item, index) => [
-                  pdfText(index + 1, { alignment: "center" }),
-                  pdfText(item.description ?? "-"),
-                  pdfText(item.quantity ?? 1, { alignment: "right" }),
-                  pdfText(item.unit ?? "ชิ้น", { alignment: "right" }),
-                  pdfText(formatPdfCurrency(item.unit_price), { alignment: "right" }),
-                  pdfText(formatPdfCurrency(item.discount), { alignment: "right" }),
-                  pdfText(formatPdfCurrency(item.total), { alignment: "right" }),
+                  pdfText(index + 1, { alignment: "center", fontSize: 9 }),
+                  pdfText(item.description ?? "-", { fontSize: 9 }),
+                  pdfText(item.quantity ?? 1, { alignment: "right", fontSize: 9 }),
+                  pdfText(item.unit ?? "ชิ้น", { alignment: "right", fontSize: 9 }),
+                  pdfText(formatPdfCurrency(item.unit_price), { alignment: "right", fontSize: 9 }),
+                  pdfText(formatPdfCurrency(item.discount), { alignment: "right", fontSize: 9 }),
+                  pdfText(formatPdfCurrency(item.total), { alignment: "right", fontSize: 9 }),
                 ]),
               ],
             },
-            layout: "lightHorizontalLines",
+            layout: framedTableLayout,
             margin: [0, 10, 0, 12],
           },
           {
+            margin: [0, 12, 0, 0],
             columns: [
-              { text: "" },
+              { width: "*", text: "" },
               {
                 width: 220,
                 table: {
@@ -265,7 +320,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
                     ],
                   ],
                 },
-                layout: "lightHorizontalLines",
+                layout: summaryTableLayout,
               },
             ],
           },
@@ -378,28 +433,22 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
     ...(vehicleDetail ? [pdfText(vehicleDetail)] : []),
     ...(mileage ? [pdfText(`เลขไมล์ ${mileage}`)] : []),
   ];
-  const infoStacks: Content[][] = vehicleLines.length
-    ? [customerLines, [{ text: "ข้อมูลรถ", bold: true }, ...vehicleLines]]
-    : [customerLines];
+  const infoBox = (stack: Content[]): Content => ({
+    table: {
+      widths: ["*"],
+      body: [[{ stack, margin: [4, 2, 4, 2] }]],
+    },
+    layout: boxLayout,
+  });
   const infoSection: Content = {
     margin: [0, 20, 0, 12],
-    table: {
-      widths: vehicleLines.length ? ["*", "*"] : ["*"],
-      body: [
-        infoStacks.map((stack) => ({
-          stack,
-          margin: [8, 6, 8, 6],
-        })),
-      ],
-    },
-    layout: {
-      hLineColor: () => "#d4d4d8",
-      vLineColor: () => "#d4d4d8",
-      paddingTop: () => 4,
-      paddingBottom: () => 4,
-      paddingLeft: () => 4,
-      paddingRight: () => 4,
-    },
+    columnGap: 12,
+    columns: vehicleLines.length
+      ? [
+          { width: "*", stack: [infoBox(customerLines)] },
+          { width: "*", stack: [infoBox([{ text: "ข้อมูลรถ", bold: true }, ...vehicleLines])] },
+        ]
+      : [{ width: "*", stack: [infoBox(customerLines)] }],
   };
   const noteText = displayValue(document.notes);
   const noteContent: Content[] = noteText
@@ -416,18 +465,24 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
       ? [
           {
             margin: [0, 8, 0, 0],
-            table: {
-              widths: [78],
-              body: [[{ text: "จ่ายแล้ว", alignment: "center", bold: true, color: "#047857" }]],
-            },
-            layout: {
-              hLineColor: () => "#047857",
-              vLineColor: () => "#047857",
-              hLineWidth: () => 1.5,
-              vLineWidth: () => 1.5,
-              paddingTop: () => 4,
-              paddingBottom: () => 4,
-            },
+            columns: [
+              { width: "*", text: "" },
+              {
+                width: 78,
+                table: {
+                  widths: ["*"],
+                  body: [[{ text: "จ่ายแล้ว", alignment: "center", bold: true, color: "#047857" }]],
+                },
+                layout: {
+                  hLineColor: () => "#047857",
+                  vLineColor: () => "#047857",
+                  hLineWidth: () => 1.5,
+                  vLineWidth: () => 1.5,
+                  paddingTop: () => 4,
+                  paddingBottom: () => 4,
+                },
+              },
+            ],
           } as Content,
         ]
       : []),
@@ -465,8 +520,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
     content: [
       {
         columns: [
-          companyHeader,
-          titleStack,
+          { width: "*", stack: [companyHeader] },
+          { width: 170, stack: titleStack },
         ],
       },
       { canvas: [{ type: "line", x1: 0, y1: 12, x2: 523, y2: 12, lineWidth: 1, lineColor: "#d4d4d4" }] },
