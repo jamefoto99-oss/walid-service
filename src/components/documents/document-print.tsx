@@ -33,6 +33,14 @@ function displayValue(value: unknown) {
   return text && text !== "-" ? text : "";
 }
 
+function displayMileageValue(value: unknown) {
+  const text = displayValue(value);
+  if (!text) return "";
+
+  const normalized = text.replace(/,/g, "").trim();
+  return Number(normalized) === 0 ? "" : text;
+}
+
 function flagValue(value: unknown) {
   return value === true || value === "true" || value === "1" || value === 1;
 }
@@ -81,7 +89,7 @@ export function DocumentPrint({
   const customerAddress = displayValue(customer?.address);
   const vehicleIdentity = [displayValue(vehicle?.license_plate), displayValue(vehicle?.province)].filter(Boolean).join(" ");
   const vehicleDetail = [displayValue(vehicle?.brand), displayValue(vehicle?.model), displayValue(vehicle?.color)].filter(Boolean).join(" ");
-  const mileage = displayValue(document.intake_mileage ?? vehicle?.mileage);
+  const mileage = displayMileageValue(document.intake_mileage) || displayMileageValue(vehicle?.mileage);
   const hasVehicleInfo = Boolean(vehicleIdentity || vehicleDetail || mileage);
   const noteText = displayValue(document.notes);
   const showPaymentInfo = type !== "repair-job" && flagValue(document.show_payment_info);
