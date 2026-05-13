@@ -13,12 +13,18 @@ const laborItemSchema = z.object({
   description: z.string().trim().optional().nullable(),
   labor_price: z.coerce.number().min(0, "ค่าแรงต้องไม่ติดลบ"),
   quantity: z.coerce.number().min(0.01, "จำนวนต้องมากกว่า 0"),
+  unit: z.string().trim().optional().nullable(),
   discount: z.coerce.number().min(0, "ส่วนลดต้องไม่ติดลบ").default(0),
 });
 
 const partUsageSchema = z.object({
   part_id: z.string().uuid("กรุณาเลือกอะไหล่"),
   quantity: z.coerce.number().min(0.01, "จำนวนต้องมากกว่า 0"),
+  unit: z.string().trim().optional().nullable(),
+  unit_price: z.preprocess(
+    (value) => (value === "" || value === null ? undefined : value),
+    z.coerce.number().min(0, "ราคาต้องไม่ติดลบ").optional(),
+  ),
   discount: z.coerce.number().min(0, "ส่วนลดต้องไม่ติดลบ").default(0),
 });
 
@@ -28,6 +34,7 @@ const repairJobItemMutationSchema = z.object({
   description: z.string().trim().optional().nullable(),
   labor_price: z.coerce.number().min(0, "ราคาต้องไม่ติดลบ"),
   quantity: z.coerce.number().min(0.01, "จำนวนต้องมากกว่า 0"),
+  unit: z.string().trim().optional().nullable(),
   discount: z.coerce.number().min(0, "ส่วนลดต้องไม่ติดลบ").default(0),
   part_id: z.preprocess(
     (value) => (value === "" ? null : value),
@@ -158,7 +165,7 @@ export async function addRepairJobLaborItem(jobId: string, input: unknown): Prom
 
     const { data, error } = await supabase
       .from("repair_job_items")
-      .insert({ repair_job_id: jobId, ...payload })
+      .insert({ repair_job_id: jobId, ...payload, unit: payload.unit?.trim() || "รายการ" })
       .select("id,title,total")
       .single();
     if (error) return { ok: false, error: error.message };
@@ -191,8 +198,9 @@ export async function consumeRepairJobPart(jobId: string, input: unknown): Promi
 
     const nextQuantity = toNumber(part.quantity_on_hand) - payload.quantity;
     const itemTitle = `อะไหล่: ${part.name}`;
-    const itemDescription = `${part.part_code} เบิกใช้ ${payload.quantity} ${part.unit}`;
-    const unitPrice = toNumber(part.sale_price);
+    const unit = payload.unit?.trim() || String(part.unit ?? "ชิ้น");
+    const itemDescription = `${part.part_code} เบิกใช้ ${payload.quantity} ${unit}`;
+    const unitPrice = payload.unit_price ?? toNumber(part.sale_price);
 
     const { data: item, error } = await supabase
       .from("repair_job_items")
@@ -203,6 +211,7 @@ export async function consumeRepairJobPart(jobId: string, input: unknown): Promi
         description: itemDescription,
         labor_price: unitPrice,
         quantity: payload.quantity,
+        unit,
         discount: payload.discount,
       })
       .select("id,title,total")
@@ -251,6 +260,7 @@ export async function updateRepairJobItem(jobId: string, input: unknown): Promis
       p_quantity: payload.quantity,
       p_discount: payload.discount,
       p_part_id: payload.part_id ?? null,
+      p_unit: payload.unit?.trim() || null,
     });
     if (error) return { ok: false, error: error.message };
 
@@ -337,9 +347,10 @@ export async function createQuotationFromRepairJob(jobId: string): Promise<Actio
       items.map((item, index) => ({
         quotation_id: quotation.id,
         item_type: String(item.title ?? "").startsWith("อะไหล่:") ? "part" : "labor",
+        part_id: item.part_id ?? null,
         description: [item.title, item.description].filter(Boolean).join(" - "),
         quantity: item.quantity,
-        unit: "ชิ้น",
+        unit: item.unit ?? "รายการ",
         unit_price: item.labor_price,
         discount: item.discount,
         total: item.total,
@@ -431,10 +442,11 @@ export async function createInstantRepairJobBill(jobId: string, input: unknown):
       const { error: cashBillItemsError } = await supabase.from("cash_bill_items").insert(
         items.map((item, index) => ({
           cash_bill_id: bill.id,
-          item_type: itemTypeFromRepairTitle(item.title),
+          item_type: item.part_id ? "part" : itemTypeFromRepairTitle(item.title),
+          part_id: item.part_id ?? null,
           description: repairItemDescription(item),
           quantity: item.quantity,
-          unit: "รายการ",
+          unit: item.unit ?? "รายการ",
           unit_price: item.labor_price,
           discount: item.discount,
           total: item.total,
@@ -510,10 +522,11 @@ export async function createInstantRepairJobBill(jobId: string, input: unknown):
     const { error: receiptItemsError } = await supabase.from("receipt_items").insert(
       items.map((item, index) => ({
         receipt_id: receipt.id,
-        item_type: itemTypeFromRepairTitle(item.title),
+        item_type: item.part_id ? "part" : itemTypeFromRepairTitle(item.title),
+        part_id: item.part_id ?? null,
         description: repairItemDescription(item),
         quantity: item.quantity,
-        unit: "รายการ",
+        unit: item.unit ?? "รายการ",
         unit_price: item.labor_price,
         discount: item.discount,
         total: item.total,

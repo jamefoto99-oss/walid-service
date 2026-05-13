@@ -12,7 +12,7 @@ import {
   createQuotationFromRepairJob,
   updateRepairJobStatus,
 } from "@/app/actions/repair-jobs";
-import { financeRoles, repairStatuses } from "@/lib/constants";
+import { financeRoles, repairStatuses, unitOptions } from "@/lib/constants";
 import type { FieldOption, UserRole } from "@/lib/types";
 import { SearchableSelect } from "../forms/searchable-select";
 import { Button } from "../ui/button";
@@ -25,6 +25,9 @@ type PartRow = {
   quantity_on_hand: number | string | null;
   unit: string | null;
 };
+
+const defaultLaborUnit = "รายการ";
+const defaultPartUnit = "ชิ้น";
 
 function partSearchLabel(part: PartRow) {
   return `${part.part_code ?? "-"} ${part.name ?? ""} | เหลือ ${part.quantity_on_hand ?? 0} ${part.unit ?? ""}`;
@@ -52,9 +55,16 @@ export function RepairJobDetailActions({
     description: "",
     labor_price: "0",
     quantity: "1",
+    unit: defaultLaborUnit,
     discount: "0",
   });
-  const [partUsage, setPartUsage] = useState({ part_id: "", quantity: "1", discount: "0" });
+  const [partUsage, setPartUsage] = useState({
+    part_id: "",
+    quantity: "1",
+    unit: defaultPartUnit,
+    unit_price: "0",
+    discount: "0",
+  });
   const [timelineNote, setTimelineNote] = useState("");
   const [instantBill, setInstantBill] = useState({
     payment_method: "cash",
@@ -96,6 +106,14 @@ export function RepairJobDetailActions({
 
   return (
     <div className="grid gap-4 xl:grid-cols-2">
+      <datalist id="repair-job-unit-options">
+        {unitOptions.map((option) => (
+          <option key={option.label} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </datalist>
+
       <section className="rounded-lg border border-border bg-surface p-4 shadow-sm">
         <div className="mb-4 flex items-center gap-2">
           <RefreshCcw className="h-4 w-4 text-primary" />
@@ -202,6 +220,16 @@ export function RepairJobDetailActions({
             />
           </label>
           <label>
+            <span className="text-sm font-semibold">หน่วยนับ</span>
+            <input
+              className="mt-1 h-11 w-full rounded-md border border-border bg-white px-3 text-sm outline-none focus:border-primary"
+              list="repair-job-unit-options"
+              value={labor.unit}
+              onChange={(event) => setLabor((value) => ({ ...value, unit: event.target.value }))}
+              placeholder="รายการ, ชิ้น, ชุด หรือระบุเอง"
+            />
+          </label>
+          <label>
             <span className="text-sm font-semibold">ส่วนลด</span>
             <input
               type="number"
@@ -218,7 +246,14 @@ export function RepairJobDetailActions({
           disabled={isPending}
           onClick={() =>
             run(() => addRepairJobLaborItem(jobId, labor), () =>
-              setLabor({ title: "", description: "", labor_price: "0", quantity: "1", discount: "0" }),
+              setLabor({
+                title: "",
+                description: "",
+                labor_price: "0",
+                quantity: "1",
+                unit: defaultLaborUnit,
+                discount: "0",
+              }),
             )
           }
         >
@@ -240,7 +275,17 @@ export function RepairJobDetailActions({
                   className="h-11 rounded-md border border-border bg-white px-3 py-2 text-sm outline-none focus:border-primary"
                   containerClassName="mt-1"
                   emptyText="ไม่พบอะไหล่"
-                  onValueChange={(partId) => setPartUsage((value) => ({ ...value, part_id: partId }))}
+                  onValueChange={(partId, option) =>
+                    setPartUsage((value) => ({
+                      ...value,
+                      part_id: partId,
+                      unit: option?.meta?.unit ? String(option.meta.unit) : value.unit,
+                      unit_price:
+                        option?.meta?.sale_price !== undefined && option?.meta?.sale_price !== null
+                          ? String(option.meta.sale_price)
+                          : value.unit_price,
+                    }))
+                  }
                   options={partOptions}
                   placeholder="พิมพ์รหัสอะไหล่หรือชื่ออะไหล่"
                   value={partUsage.part_id}
@@ -255,6 +300,27 @@ export function RepairJobDetailActions({
                   className="mt-1 h-11 w-full rounded-md border border-border bg-white px-3 text-sm outline-none focus:border-primary"
                   value={partUsage.quantity}
                   onChange={(event) => setPartUsage((value) => ({ ...value, quantity: event.target.value }))}
+                />
+              </label>
+              <label>
+                <span className="text-sm font-semibold">หน่วยนับ</span>
+                <input
+                  className="mt-1 h-11 w-full rounded-md border border-border bg-white px-3 text-sm outline-none focus:border-primary"
+                  list="repair-job-unit-options"
+                  value={partUsage.unit}
+                  onChange={(event) => setPartUsage((value) => ({ ...value, unit: event.target.value }))}
+                  placeholder="ชิ้น, ชุด, คู่ หรือระบุเอง"
+                />
+              </label>
+              <label>
+                <span className="text-sm font-semibold">ราคา/หน่วย</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  className="mt-1 h-11 w-full rounded-md border border-border bg-white px-3 text-sm outline-none focus:border-primary"
+                  value={partUsage.unit_price}
+                  onChange={(event) => setPartUsage((value) => ({ ...value, unit_price: event.target.value }))}
                 />
               </label>
               <label>
@@ -274,7 +340,13 @@ export function RepairJobDetailActions({
               disabled={isPending}
               onClick={() =>
                 run(() => consumeRepairJobPart(jobId, partUsage), () =>
-                  setPartUsage({ part_id: "", quantity: "1", discount: "0" }),
+                  setPartUsage({
+                    part_id: "",
+                    quantity: "1",
+                    unit: defaultPartUnit,
+                    unit_price: "0",
+                    discount: "0",
+                  }),
                 )
               }
             >

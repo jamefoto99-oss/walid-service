@@ -196,6 +196,14 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
 
   const { document, company, customer, vehicle, items } = data;
   const cancelled = isCancelledDocument(document);
+  const forceSinglePage = items.length <= 12;
+  const tableFontSize = forceSinglePage ? 7.5 : 9;
+  const detailTableMargin: [number, number, number, number] = forceSinglePage ? [0, 6, 0, 6] : [0, 10, 0, 12];
+  const summaryMargin: [number, number, number, number] = forceSinglePage ? [0, 6, 0, 0] : [0, 12, 0, 0];
+  const infoSectionMargin: [number, number, number, number] = forceSinglePage ? [0, 12, 0, 8] : [0, 20, 0, 12];
+  const paymentMargin: [number, number, number, number] = forceSinglePage ? [0, 8, 0, 0] : [0, 16, 0, 0];
+  const noteTitleMargin: [number, number, number, number] = forceSinglePage ? [0, 10, 0, 2] : [0, 18, 0, 4];
+  const signatureMargin: [number, number, number, number] = forceSinglePage ? [0, 36, 0, 0] : [0, 70, 0, 0];
   const showPaymentInfo = type !== "repair-job" && flagValue(document.show_payment_info);
   const showPaidStamp = type !== "repair-job" && flagValue(document.show_paid_stamp);
   const signatures = signatureDefinitions(type);
@@ -217,7 +225,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
   const companyHeader: Content = logoDataUrl
     ? {
         columns: [
-          { image: logoDataUrl, width: 54, margin: [0, 0, 8, 0] },
+          { image: logoDataUrl, width: forceSinglePage ? 46 : 54, margin: [0, 0, 8, 0] },
           { width: "*", stack: companyLines },
         ],
         columnGap: 8,
@@ -237,6 +245,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
         ? [
             {
               table: {
+                headerRows: 1,
+                dontBreakRows: true,
                 widths: [24, "*", 58, 58, 66, 66, 66],
                 body: [
                   [
@@ -249,21 +259,21 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
                     pdfText("ยอดค้าง", { alignment: "right", bold: true }),
                   ],
                   ...items.map((item, index) => [
-                    pdfText(index + 1, { alignment: "center", fontSize: 9 }),
-                    pdfText(item.invoice_no ?? "-", { fontSize: 9 }),
-                    pdfText(formatPdfDate(item.issued_at), { fontSize: 9 }),
-                    pdfText(formatPdfDate(item.due_at), { fontSize: 9 }),
-                    pdfText(formatPdfCurrency(item.total), { alignment: "right", fontSize: 9 }),
-                    pdfText(formatPdfCurrency(item.paid_amount), { alignment: "right", fontSize: 9 }),
-                    pdfText(formatPdfCurrency(item.balance_due), { bold: true, alignment: "right", fontSize: 9 }),
+                    pdfText(index + 1, { alignment: "center", fontSize: tableFontSize }),
+                    pdfText(item.invoice_no ?? "-", { fontSize: tableFontSize }),
+                    pdfText(formatPdfDate(item.issued_at), { fontSize: tableFontSize }),
+                    pdfText(formatPdfDate(item.due_at), { fontSize: tableFontSize }),
+                    pdfText(formatPdfCurrency(item.total), { alignment: "right", fontSize: tableFontSize }),
+                    pdfText(formatPdfCurrency(item.paid_amount), { alignment: "right", fontSize: tableFontSize }),
+                    pdfText(formatPdfCurrency(item.balance_due), { bold: true, alignment: "right", fontSize: tableFontSize }),
                   ]),
                 ],
               },
               layout: framedTableLayout,
-              margin: [0, 10, 0, 12],
+              margin: detailTableMargin,
             },
             {
-              margin: [0, 12, 0, 0],
+              margin: summaryMargin,
               columns: [
                 { width: "*", text: "" },
                 {
@@ -286,6 +296,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
       : [
           {
             table: {
+              headerRows: 1,
+              dontBreakRows: true,
               widths: [24, "*", 28, 32, 58, 58, 62],
               body: [
                 [
@@ -298,21 +310,21 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
                   pdfText("รวม", { alignment: "right", bold: true }),
                 ],
                 ...items.map((item, index) => [
-                  pdfText(index + 1, { alignment: "center", fontSize: 9 }),
-                  pdfText(item.description ?? "-", { fontSize: 9 }),
-                  pdfText(item.quantity ?? 1, { alignment: "right", fontSize: 9 }),
-                  pdfText(item.unit ?? "ชิ้น", { alignment: "right", fontSize: 9 }),
-                  pdfText(formatPdfCurrency(item.unit_price), { alignment: "right", fontSize: 9 }),
-                  pdfText(formatPdfCurrency(item.discount), { alignment: "right", fontSize: 9 }),
-                  pdfText(formatPdfCurrency(item.total), { alignment: "right", fontSize: 9 }),
+                  pdfText(index + 1, { alignment: "center", fontSize: tableFontSize }),
+                  pdfText(item.description ?? "-", { fontSize: tableFontSize }),
+                  pdfText(item.quantity ?? 1, { alignment: "right", fontSize: tableFontSize }),
+                  pdfText(item.unit ?? "ชิ้น", { alignment: "right", fontSize: tableFontSize }),
+                  pdfText(formatPdfCurrency(item.unit_price), { alignment: "right", fontSize: tableFontSize }),
+                  pdfText(formatPdfCurrency(item.discount), { alignment: "right", fontSize: tableFontSize }),
+                  pdfText(formatPdfCurrency(item.total), { alignment: "right", fontSize: tableFontSize }),
                 ]),
               ],
             },
             layout: framedTableLayout,
-            margin: [0, 10, 0, 12],
+            margin: detailTableMargin,
           },
           {
-            margin: [0, 12, 0, 0],
+            margin: summaryMargin,
             columns: [
               { width: "*", text: "" },
               {
@@ -385,8 +397,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
   const paymentContent: Content[] =
     showPaymentInfo && hasPaymentInfo(company)
       ? [
-          {
-            margin: [0, 16, 0, 0],
+        {
+            margin: paymentMargin,
             table: {
               widths: [64, "*"],
               body: [
@@ -449,7 +461,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
     layout: boxLayout,
   });
   const infoSection: Content = {
-    margin: [0, 20, 0, 12],
+    margin: infoSectionMargin,
     columnGap: 12,
     columns: vehicleLines.length
       ? [
@@ -460,8 +472,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
   };
   const noteText = displayValue(document.notes);
   const noteContent: Content[] = noteText
-    ? [
-        { text: "หมายเหตุ", bold: true, margin: [0, 18, 0, 4] },
+      ? [
+        { text: "หมายเหตุ", bold: true, margin: noteTitleMargin },
         pdfText(noteText),
       ]
     : [];
@@ -496,7 +508,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
       : []),
   ];
   const signatureContent: Content = {
-    margin: [0, 70, 0, 0],
+    margin: signatureMargin,
     columnGap: 18,
     columns: signatures.map((signature) => ({
       width: "*",
@@ -520,10 +532,10 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
 
   const definition: TDocumentDefinitions = {
     pageSize: "A4",
-    pageMargins: [36, 36, 36, 48],
+    pageMargins: forceSinglePage ? [30, 28, 30, 28] : [36, 36, 36, 48],
     defaultStyle: {
       font: "NotoSansThai",
-      fontSize: 10,
+      fontSize: forceSinglePage ? 8.6 : 10,
     },
     content: [
       {
@@ -541,8 +553,8 @@ export async function GET(_: Request, { params }: { params: Promise<{ type: stri
       signatureContent,
     ],
     styles: {
-      company: { fontSize: 16, bold: true },
-      title: { fontSize: 22, bold: true },
+      company: { fontSize: forceSinglePage ? 14 : 16, bold: true },
+      title: { fontSize: forceSinglePage ? 19 : 22, bold: true },
     },
   };
 

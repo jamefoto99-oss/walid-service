@@ -5,7 +5,7 @@ import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { deleteRepairJobItem, updateRepairJobItem } from "@/app/actions/repair-jobs";
 import { SearchableSelect } from "@/components/forms/searchable-select";
-import { financeRoles, operationRoles } from "@/lib/constants";
+import { financeRoles, operationRoles, unitOptions } from "@/lib/constants";
 import type { FieldOption, UserRole } from "@/lib/types";
 import { cn, formatCurrency, toNumber } from "@/lib/utils";
 import { Button } from "../ui/button";
@@ -25,6 +25,7 @@ export type RepairJobItemRow = {
   description: string | null;
   labor_price: number | string | null;
   quantity: number | string | null;
+  unit?: string | null;
   discount: number | string | null;
   total: number | string | null;
   part_id?: string | null;
@@ -36,6 +37,7 @@ type ItemDraft = {
   description: string;
   labor_price: string;
   quantity: string;
+  unit: string;
   discount: string;
   part_id: string;
 };
@@ -50,6 +52,7 @@ function draftFromItem(item: RepairJobItemRow): ItemDraft {
     description: item.description ?? "",
     labor_price: String(item.labor_price ?? 0),
     quantity: String(item.quantity ?? 1),
+    unit: item.unit ?? (item.part_id ? item.parts?.unit ?? "ชิ้น" : "รายการ"),
     discount: String(item.discount ?? 0),
     part_id: item.part_id ?? "",
   };
@@ -125,6 +128,7 @@ export function RepairJobItemsManager({
         description: draft.description,
         labor_price: toNumber(draft.labor_price),
         quantity: toNumber(draft.quantity),
+        unit: draft.unit,
         discount: toNumber(draft.discount),
         part_id: isPart ? draft.part_id : null,
       });
@@ -162,6 +166,14 @@ export function RepairJobItemsManager({
 
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-surface shadow-sm">
+      <datalist id="repair-job-item-unit-options">
+        {unitOptions.map((option) => (
+          <option key={option.label} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </datalist>
+
       <div className="flex items-center justify-between border-b border-border p-4">
         <div>
           <h2 className="font-semibold">รายการซ่อมในงาน</h2>
@@ -175,7 +187,7 @@ export function RepairJobItemsManager({
             <tr>
               <th className="px-4 py-3">รายการ</th>
               <th className="px-4 py-3 text-right">ราคา/หน่วย</th>
-              <th className="px-4 py-3 text-right">จำนวน</th>
+              <th className="px-4 py-3 text-right">จำนวน/หน่วย</th>
               <th className="px-4 py-3 text-right">ส่วนลด</th>
               <th className="px-4 py-3 text-right">รวม</th>
               <th className="px-4 py-3 text-right">จัดการ</th>
@@ -199,7 +211,11 @@ export function RepairJobItemsManager({
                             onValueChange={(partId, option) => {
                               updateDraft({
                                 part_id: partId,
-                                labor_price: option?.meta?.sale_price ? String(option.meta.sale_price) : draft.labor_price,
+                                labor_price:
+                                  option?.meta?.sale_price !== undefined && option?.meta?.sale_price !== null
+                                    ? String(option.meta.sale_price)
+                                    : draft.labor_price,
+                                unit: option?.meta?.unit ? String(option.meta.unit) : draft.unit,
                               });
                             }}
                             options={partOptions}
@@ -244,16 +260,25 @@ export function RepairJobItemsManager({
                   </td>
                   <td className="px-4 py-3 text-right">
                     {isEditing ? (
-                      <input
-                        className={cn(inputClass(), "text-right")}
-                        min="0.01"
-                        step="0.01"
-                        type="number"
-                        value={draft.quantity}
-                        onChange={(event) => updateDraft({ quantity: event.target.value })}
-                      />
+                      <div className="space-y-2">
+                        <input
+                          className={cn(inputClass(), "text-right")}
+                          min="0.01"
+                          step="0.01"
+                          type="number"
+                          value={draft.quantity}
+                          onChange={(event) => updateDraft({ quantity: event.target.value })}
+                        />
+                        <input
+                          className={cn(inputClass(), "text-right")}
+                          list="repair-job-item-unit-options"
+                          value={draft.unit}
+                          onChange={(event) => updateDraft({ unit: event.target.value })}
+                          placeholder="หน่วยนับ"
+                        />
+                      </div>
                     ) : (
-                      item.quantity ?? "-"
+                      `${item.quantity ?? "-"} ${item.unit ?? (item.part_id ? item.parts?.unit ?? "ชิ้น" : "รายการ")}`
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">

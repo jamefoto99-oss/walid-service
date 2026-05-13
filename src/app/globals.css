@@ -42,6 +42,11 @@ textarea {
 }
 
 @media print {
+  @page {
+    size: A4;
+    margin: 8mm;
+  }
+
   body {
     background: #ffffff;
   }

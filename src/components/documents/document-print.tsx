@@ -95,6 +95,7 @@ export function DocumentPrint({
   const showPaymentInfo = type !== "repair-job" && flagValue(document.show_payment_info);
   const showPaidStamp = type !== "repair-job" && flagValue(document.show_paid_stamp);
   const signatures = signatureDefinitions(type);
+  const forceSinglePage = items.length <= 12;
 
   return (
     <main className="min-h-screen bg-background p-4 print:bg-white">
@@ -106,7 +107,12 @@ export function DocumentPrint({
           พิมพ์
         </button>
       </div>
-      <section className="relative mx-auto max-w-4xl rounded-lg bg-white p-8 shadow-sm print:shadow-none">
+      <section
+        className={cn(
+          "relative mx-auto max-w-4xl rounded-lg bg-white shadow-sm print:shadow-none",
+          forceSinglePage ? "p-6 text-[13px] print:p-4" : "p-8",
+        )}
+      >
         {cancelled ? (
           <div className="pointer-events-none absolute inset-x-0 top-72 z-0 flex rotate-[-18deg] justify-center opacity-10 print:opacity-15">
             <span className="border-8 border-red-700 px-8 py-3 text-7xl font-black uppercase tracking-normal text-red-700">
@@ -114,20 +120,20 @@ export function DocumentPrint({
             </span>
           </div>
         ) : null}
-        <header className="flex items-start justify-between gap-6 border-b border-zinc-300 pb-6">
+        <header className={cn("flex items-start justify-between gap-6 border-b border-zinc-300", forceSinglePage ? "pb-4" : "pb-6")}>
           <div className="flex items-start gap-4">
             {company?.logo_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img alt="โลโก้กิจการ" className="h-14 w-14 object-contain" src={String(company.logo_url)} />
             ) : null}
             <div>
-              <p className="text-2xl font-bold leading-tight">{companyName}</p>
+              <p className={cn("font-bold leading-tight", forceSinglePage ? "text-xl" : "text-2xl")}>{companyName}</p>
               {companyAddress ? <p className="mt-1 max-w-lg text-sm text-zinc-600">{companyAddress}</p> : null}
               {companyContact ? <p className="text-sm text-zinc-600">{companyContact}</p> : null}
             </div>
           </div>
           <div className="text-right">
-            <h1 className="text-3xl font-bold">{title}</h1>
+            <h1 className={cn("font-bold", forceSinglePage ? "text-2xl" : "text-3xl")}>{title}</h1>
             <p className="mt-2 font-mono text-sm">{String(documentNumber(type, document))}</p>
             <p className="text-sm text-zinc-600">วันที่ {formatDate(document.issued_at ?? document.received_at ?? document.created_at)}</p>
             {showPaidStamp ? (
@@ -155,7 +161,7 @@ export function DocumentPrint({
           </section>
         ) : null}
 
-        <section className={cn("grid gap-4 border-b border-zinc-300 py-6", hasVehicleInfo && "md:grid-cols-2")}>
+        <section className={cn("grid gap-4 border-b border-zinc-300", forceSinglePage ? "py-4" : "py-6", hasVehicleInfo && "md:grid-cols-2")}>
           <div className="rounded-md border border-zinc-300 p-4">
             <h2 className="font-semibold">ข้อมูลลูกค้า</h2>
             <p className="mt-2">{displayValue(customer?.full_name) || "-"}</p>
@@ -173,7 +179,7 @@ export function DocumentPrint({
         </section>
 
         {type === "repair-job" ? (
-          <section className="space-y-4 border-b border-zinc-300 py-6">
+          <section className={cn("space-y-4 border-b border-zinc-300", forceSinglePage ? "py-4" : "py-6")}>
             <div>
               <h2 className="font-semibold">อาการเสียที่ลูกค้าแจ้ง</h2>
               <p className="mt-2 whitespace-pre-wrap text-sm">{String(document.reported_problem ?? "-")}</p>
@@ -188,9 +194,9 @@ export function DocumentPrint({
             </div>
           </section>
         ) : type === "billing-statements" ? (
-          <section className="border-b border-zinc-300 py-6">
+          <section className={cn("border-b border-zinc-300", forceSinglePage ? "py-4" : "py-6")}>
             <div className="rounded-md border border-zinc-300 p-3">
-            <table className="w-full border-collapse text-sm">
+            <table className={cn("w-full border-collapse", forceSinglePage ? "text-xs" : "text-sm")}>
               <thead>
                 <tr className="border-b border-zinc-300 text-left">
                   <th className="w-12 py-2 text-center">ลำดับ</th>
@@ -229,9 +235,9 @@ export function DocumentPrint({
             </div>
           </section>
         ) : (
-          <section className="border-b border-zinc-300 py-6">
+          <section className={cn("border-b border-zinc-300", forceSinglePage ? "py-4" : "py-6")}>
             <div className="rounded-md border border-zinc-300 p-3">
-            <table className="w-full border-collapse text-sm">
+            <table className={cn("w-full border-collapse", forceSinglePage ? "text-xs" : "text-sm")}>
               <thead>
                 <tr className="border-b border-zinc-300 text-left">
                   <th className="w-12 py-2 text-center">ลำดับ</th>
@@ -276,7 +282,7 @@ export function DocumentPrint({
         )}
 
         {showPaymentInfo && hasPaymentInfo(company) ? (
-          <section className="border-b border-zinc-300 py-6">
+          <section className={cn("border-b border-zinc-300", forceSinglePage ? "py-4" : "py-6")}>
             <h2 className="font-semibold">ช่องทางการชำระเงิน</h2>
             <div className="mt-3 grid gap-3 rounded-md border border-zinc-200 bg-zinc-50 p-4 text-sm md:grid-cols-[auto_1fr]">
               <div className="flex h-14 w-14 items-center justify-center rounded-md border border-zinc-200 bg-white">
@@ -305,13 +311,13 @@ export function DocumentPrint({
         ) : null}
 
         {noteText ? (
-          <section className="py-6">
+          <section className={forceSinglePage ? "py-4" : "py-6"}>
             <h2 className="font-semibold">หมายเหตุ</h2>
             <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-600">{noteText}</p>
           </section>
         ) : null}
 
-        <footer className="mt-12 grid gap-8" style={{ gridTemplateColumns: `repeat(${signatures.length}, minmax(0, 1fr))` }}>
+        <footer className={cn("grid gap-8", forceSinglePage ? "mt-8" : "mt-12")} style={{ gridTemplateColumns: `repeat(${signatures.length}, minmax(0, 1fr))` }}>
           {signatures.map((signature) => (
             <div className="text-center text-sm" key={signature.label}>
               <div className="border-t border-zinc-400 pt-3">{signature.label}</div>

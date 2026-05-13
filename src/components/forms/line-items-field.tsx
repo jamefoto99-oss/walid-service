@@ -71,19 +71,19 @@ export function LineItemsField({
     onChange(items.length <= 1 ? [blankItem(effectiveDefaultItemType)] : items.filter((_, itemIndex) => itemIndex !== index));
   }
 
+  function addItem() {
+    onChange([...items, blankItem(effectiveDefaultItemType)]);
+  }
+
   const subtotal = items.reduce((sum, item) => sum + itemTotal(item), 0);
 
   return (
     <section className="space-y-4 rounded-md border border-border bg-surface-soft p-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div>
         <div>
           <p className="text-sm font-semibold">รายการค่าแรง / อะไหล่</p>
           <p className="text-xs text-muted">พิมพ์รายละเอียดเองได้ หรือค้นหาอะไหล่จากสต๊อกเพื่อดึงหน่วยนับมาเติมอัตโนมัติ</p>
         </div>
-        <Button type="button" variant="secondary" className="h-10" onClick={() => onChange([...items, blankItem(effectiveDefaultItemType)])}>
-          <Plus className="h-4 w-4" />
-          เพิ่มรายการ
-        </Button>
       </div>
 
       <datalist id={unitListId}>
@@ -208,8 +208,14 @@ export function LineItemsField({
         ))}
       </div>
 
-      <div className="flex justify-end text-sm font-semibold">
-        รวมก่อนส่วนลดเอกสาร: {formatCurrency(subtotal)}
+      <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+        <Button type="button" variant="secondary" className="h-11 sm:w-auto" onClick={addItem}>
+          <Plus className="h-4 w-4" />
+          เพิ่มรายการ
+        </Button>
+        <div className="text-right text-sm font-semibold">
+          รวมก่อนส่วนลดเอกสาร: {formatCurrency(subtotal)}
+        </div>
       </div>
     </section>
   );

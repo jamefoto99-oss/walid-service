@@ -148,6 +148,7 @@ create table public.repair_job_items (
   description text,
   labor_price numeric(12,2) not null default 0,
   quantity numeric(12,2) not null default 1,
+  unit text not null default 'รายการ',
   discount numeric(12,2) not null default 0,
   total numeric(12,2) generated always as (greatest((labor_price * quantity) - discount, 0)) stored,
   created_at timestamptz not null default now(),
