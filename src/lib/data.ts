@@ -86,10 +86,12 @@ export async function getModuleRows(config: ModuleConfig) {
 
   const selectColumns =
     config.key === "cash-bills"
-      ? "*, cash_bill_items(*)"
-      : config.key === "billing-statements"
-        ? "*, billing_statement_items(*)"
-        : "*";
+      ? "*, customers(phone), cash_bill_items(*)"
+      : config.key === "receipts"
+        ? "*, customers(phone)"
+        : config.key === "billing-statements"
+          ? "*, billing_statement_items(*)"
+          : "*";
   const query = supabase.from(config.table).select(selectColumns).order("created_at", { ascending: false });
   if (config.table !== "profiles") query.is("deleted_at", null);
 
@@ -99,7 +101,24 @@ export async function getModuleRows(config: ModuleConfig) {
     return { setupRequired: false, rows: [] as Record<string, unknown>[] };
   }
 
-  return { setupRequired: false, rows: (data ?? []) as unknown as Record<string, unknown>[] };
+  const rows = (data ?? []) as unknown as Record<string, unknown>[];
+  const rowsWithCustomerPhone =
+    config.key === "receipts" || config.key === "cash-bills"
+      ? rows.map((row) => {
+          const customer = row.customers && typeof row.customers === "object" && !Array.isArray(row.customers)
+            ? (row.customers as Record<string, unknown>)
+            : null;
+          const storedPhone = typeof row.customer_phone === "string" ? row.customer_phone.trim() : row.customer_phone;
+          const customerPhone = typeof customer?.phone === "string" ? customer.phone.trim() : customer?.phone;
+
+          return {
+            ...row,
+            customer_phone: storedPhone || customerPhone || "",
+          };
+        })
+      : rows;
+
+  return { setupRequired: false, rows: rowsWithCustomerPhone };
 }
 
 export async function getBillingStatementsPageData() {
